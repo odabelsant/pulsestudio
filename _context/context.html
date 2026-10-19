@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Contexto Vivo - Asistente IA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body { background: #0f172a; color: #e2e8f0; }
+    </style>
+  </head>
+  <body class="min-h-screen bg-slate-950 text-slate-100">
+    <main class="mx-auto max-w-5xl space-y-8 px-6 py-10">
+      <header class="rounded-3xl border border-slate-700 bg-slate-900/90 p-8 shadow-2xl shadow-black/40">
+        <p class="text-sm uppercase tracking-[0.24em] text-sky-300/80">Asistente IA</p>
+        <h1 class="mt-4 text-4xl font-semibold text-white">Contexto Vivo del Proyecto</h1>
+        <p class="mt-3 max-w-3xl text-slate-400">Documentación actualizada del estado del proyecto, arquitectura y próximos pasos.</p>
+      </header>
+
+      <section class="rounded-3xl border border-slate-700 bg-slate-900/90 p-8 shadow-xl shadow-black/20">
+        <h2 class="text-2xl font-semibold text-white">Arquitectura del Proyecto</h2>
+        <p class="mt-4 text-slate-300">El proyecto está construido con una pila moderna de frontend y backend local, incluyendo persistencia con Prisma y SQLite.</p>
+        <ul class="mt-6 space-y-3 text-slate-300">
+          <li><strong>Next.js 16.2.9</strong> con App Router y `src/`.</li>
+          <li><strong>TypeScript 5</strong> para tipado estricto.</li>
+          <li><strong>Tailwind CSS v4</strong> para estilo utilitario.</li>
+          <li><strong>Prisma 7.8.0</strong> + <strong>SQLite</strong> para almacenamiento local.</li>
+          <li><strong>AI SDK</strong> con `ai` y `@ai-sdk/google`.</li>
+          <li><strong>Shadcn UI</strong> para componentes reutilizables de interfaz.</li>
+        </ul>
+      </section>
+
+      <section class="rounded-3xl border border-slate-700 bg-slate-900/90 p-8 shadow-xl shadow-black/20">
+        <h2 class="text-2xl font-semibold text-white">Estructura de Carpetas</h2>
+        <ul class="mt-4 space-y-3 text-slate-300">
+          <li><strong>src/app/</strong> - rutas y páginas principales.</li>
+          <li><strong>src/app/(admin)/</strong> - paneles administrativos para agentes y contexto.</li>
+          <li><strong>src/components/</strong> - UI y componentes reutilizables.</li>
+          <li><strong>src/lib/</strong> - utilidades compartidas, incluyendo Prisma.</li>
+          <li><strong>src/generated/prisma/</strong> - cliente Prisma generado.</li>
+          <li><strong>prisma/</strong> - esquema y configuración de la base de datos.</li>
+          <li><strong>_context/</strong> - memoria viva y documentación del proyecto.</li>
+        </ul>
+      </section>
+
+      <section class="rounded-3xl border border-slate-700 bg-slate-900/90 p-8 shadow-xl shadow-black/20">
+        <h2 class="text-2xl font-semibold text-white">Conexión de Módulos</h2>
+        <p class="mt-4 text-slate-300">Las páginas administran datos mediante APIs CRUD que usan Prisma para persistencia local.</p>
+        <ol class="mt-4 list-decimal space-y-3 pl-5 text-slate-300">
+          <li>La UI de administración llama a `/api/agents` y `/api/context`.</li>
+          <li>Las rutas API usan `src/lib/prisma.ts` para acceder a SQLite.</li>
+          <li>La página principal consulta y adjunta contextos locales.</li>
+          <li>El estado `attached` en `src/app/page.tsx` mantiene los documentos adjuntos seleccionados.</li>
+        </ol>
+      </section>
+
+      <section class="rounded-3xl border border-slate-700 bg-slate-900/90 p-8 shadow-xl shadow-black/20">
+        <h2 class="text-2xl font-semibold text-white">Variables de Entorno</h2>
+        <p class="mt-4 text-slate-300">El proyecto usa estas rutas absolutas en `.env`:</p>
+        <pre class="mt-4 rounded-3xl border border-slate-800 bg-slate-950/80 p-4 text-sm text-slate-300">
+DATABASE_URL="file:./dev.db"
+AGENTS_WORKSPACE_PATH="/Users/onielsantos/Desktop/Sistema Agentico ia"
+PORTFOLIO_WORKSPACE_PATH="/Users/onielsantos/Desktop/Portafolio Odabel"
+        </pre>
+      </section>
+
+      <section class="rounded-3xl border border-slate-700 bg-slate-900/90 p-8 shadow-xl shadow-black/20">
+        <h2 class="text-2xl font-semibold text-white">Estado Actual</h2>
+        <p class="mt-4 text-slate-300">El proyecto ya tiene persistencia real, administración CRUD y una interfaz de adjuntar contexto con notificaciones de UI.</p>
+        <p class="mt-4 text-slate-300">El siguiente objetivo es completar la integración del motor AI y construir la memoria viva que capture contexto dinámico.</p>
+      </section>
+    </main>
+  </body>
+</html>

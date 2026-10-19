@@ -1,0 +1,8 @@
+# UNIVERSAL WORKFLOW DIRECTIVE
+
+Every time the user gives you a new task, feature request, or bug fix, you MUST strictly follow this execution loop:
+
+1. READ: Read `_context/arquitectura.md` and `_context/context.md` before writing any code.
+2. PLAN: Generate your implementation plan making sure it aligns with the existing architecture.
+3. EXECUTE: Write the code, implement the feature, or fix the bug.
+4. UPDATE (MANDATORY): Before marking the task as 'done', open `_context/context.md` and `_context/arquitectura.md` (and the .html equivalent) and update them with a summary of the changes you just made, new dependencies added, bugs fixed, and how this scales the project.

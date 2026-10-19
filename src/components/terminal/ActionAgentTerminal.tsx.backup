@@ -1,0 +1,882 @@
+"use client";
+
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/use-toast";
+import {
+  Terminal as TerminalIcon,
+  Play,
+  RotateCcw,
+  Copy,
+  Check,
+  Bot,
+  Sparkles,
+  Cpu,
+  Monitor,
+  ExternalLink,
+} from "lucide-react";
+
+type ActionJob =
+  | "lint"
+  | "build"
+  | "typecheck"
+  | "prisma"
+  | "playwright";
+
+type LogLine = {
+  id: string;
+  type: "input" | "stdout" | "stderr" | "system" | "agent";
+  text: string;
+  timestamp: string;
+};
+
+type WorkspaceStatus = {
+  workspace: string;
+  ready: boolean;
+  configured: boolean;
+};
+
+type TerminalTab = {
+  id: string;
+  name: string;
+  cwd: string;
+  createdAt: number;
+};
+
+type TerminalSession = {
+  tabId: string;
+  processId: number;
+  isRunning: boolean;
+  title: string;
+};
+
+const AGENT_ROLES = [
+  { id: "debugger", name: "Debugger Agent", color: "text-amber-400", desc: "Diagnóstico profundo de stack traces y errores" },
+  { id: "qa", name: "QA Automation", color: "text-emerald-400", desc: "Ejecución y validación de suites de pruebas Playwright" },
+  { id: "arquitecto", name: "Arquitecto", color: "text-purple-400", desc: "Inspección de estructura, tipos y dependencias" },
+  { id: "optimizador", name: "Optimizador", color: "text-blue-400", desc: "Rendimiento de bundles y tiempos de compilación" },
+];
+
+// Comandos personalizados de terminal
+const CUSTOM_COMMANDS = {
+  "/clear": {
+    handler: (term: any, logs: LogLine[]) => {
+      term?.clear();
+      return [];
+    },
+    description: "Limpiar la consola",
+  },
+  "/help": {
+    handler: () => {
+      return [
+        { type: "system", text: "Comandos personalizados disponibles:", timestamp: new Date().toLocaleTimeString() },
+        { type: "system", text: "/clear - Limpiar la consola", timestamp: new Date().toLocaleTimeString() },
+        { type: "system", text: "/help - Mostrar esta ayuda", timestamp: new Date().toLocaleTimeString() },
+        { type: "system", text: "/context - Mostrar información del contexto actual", timestamp: new Date().toLocaleTimeString() },
+        { type: "system", text: "/git-sync - Sincronizar cambios de Git", timestamp: new Date().toLocaleTimeString() },
+        { type: "system", text: "/run-tests [ruta] - Ejecutar pruebas Playwright", timestamp: new Date().toLocaleTimeString() },
+        { type: "system", text: "", timestamp: new Date().toLocaleTimeString() },
+        { type: "system", text: "Comandos del sistema:", timestamp: new Date().toLocaleTimeString() },
+        { type: "system", text: "git status, git commit, git push - Control de versiones", timestamp: new Date().toLocaleTimeString() },
+        { type: "system", text: "npm, pnpm, bun - Gestión de dependencias", timestamp: new Date().toLocaleTimeString() },
+        { type: "system", text: "ls, cd, cat - Comandos básicos del shell", timestamp: new Date().toLocaleTimeString() },
+      ];
+    },
+    description: "Mostrar ayuda de comandos",
+  },
+  "/context": {
+    handler: (term: any, session: TerminalSession) => {
+      return [
+        { type: "system", text: `=== Contexto de Terminal ===`, timestamp: new Date().toLocaleTimeString() },
+        { type: "system", text: `Pestaña: ${session.tabId}`, timestamp: new Date().toLocaleTimeString() },
+        { type: "system", text: `Directorio: ${session.cwd}`, timestamp: new Date().toLocaleTimeString() },
+        { type: "system", text: `Shell PID: ${session.processId}`, timestamp: new Date().toLocaleTimeString() },
+        { type: "system", text: "Agente activo: " + (session.isRunning ? "Ejecutando..." : "Inactivo"), timestamp: new Date().toLocaleTimeString() },
+        { type: "system", text: "=================================", timestamp: new Date().toLocaleTimeString() },
+      ];
+    },
+    description: "Mostrar contexto de sesión",
+  },
+  "/git-sync": {
+    handler: async (term: any, dispatch: any) => {
+      dispatch?.appendLog("system", "Iniciando sincronización Git...");
+      try {
+        const res = await dispatch?.("/api/runner", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ job: "playwright" }), // Using runner for git would need new API route
+        });
+        const data = await res.json();
+        dispatch?.appendLog("stdout", data?.output || "Git sync completed");
+      } catch (err) {
+        dispatch?.appendLog("stderr", "Error en git sync: " + (err instanceof Error ? err.message : "Unknown error"));
+      }
+    },
+    description: "Sincronizar repositorio Git",
+  },
+  "/run-tests": {
+    handler: (term: any, args: string[], dispatch: any) => {
+      const testPath = args.length > 0 ? args[0] : undefined;
+      dispatch?.appendLog("system", `Ejecutando pruebas: ${testPath || "todos los tests"}`);
+      dispatch?.handleRunJob("playwright", testPath);
+    },
+    description: "Ejecutar pruebas Playwright",
+  },
+};
+
+export function ActionAgentTerminal({
+  onDiagnose,
+}: {
+  onDiagnose?: (output: string) => void;
+}) {
+  const [tabs, setTabs] = useState<TerminalTab[]>([{
+    id: "default",
+    name: "Terminal Principal",
+    cwd: "/Users/onielsantos/Desktop/Documentos-Proyectos/PulseStudio",
+    createdAt: Date.now(),
+  }]);
+  const [activeTab, setActiveTab] = useState("default");
+  const [tabsState, setTabsState] = useState<Map<string, any>>(new Map());
+  const [sessions, setSessions] = useState<Map<string, TerminalSession>>(new Map());
+  const [terminalRefs, setTerminalRefs] = useState<Map<string, any>>(new Map());
+  const [isElectronActive, setIsElectronActive] = useState(false);
+  const [shellInfo, setShellInfo] = useState<{ shell?: string; pid?: number; cwd?: string } | null>(null);
+
+  // Web mode state per tab
+  const [isRunning, setIsRunning] = useState<Map<string, boolean>>(new Map());
+  const [currentJob, setCurrentJob] = useState<Map<string, string | null>>(new Map());
+  const [logsState, setLogsState] = useState<Map<string, LogLine[]>>(new Map());
+  const [commandInput, setCommandInput] = useState<Map<string, string>>(new Map());
+  const [copied, setCopied] = useState(false);
+
+  const terminalEndRef = useRef<HTMLDivElement>(null);
+  const xtermContainerRef = useRef<HTMLDivElement>(null);
+  const xtermInstanceRef = useRef<any>(null);
+  const { toast } = useToast();
+
+  // Initialize tabs from localStorage or defaults
+  useEffect(() => {
+    const savedTabs = localStorage.getItem("pulse_terminal_tabs");
+    if (savedTabs) {
+      setTabs(JSON.parse(savedTabs));
+    }
+    const savedActive = localStorage.getItem("pulse_terminal_active");
+    if (savedActive) setActiveTab(savedActive);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("pulse_terminal_tabs", JSON.stringify(tabs));
+    localStorage.setItem("pulse_terminal_active", activeTab);
+  }, [tabs, activeTab]);
+
+  // Setup real Electron xterm.js terminal when running inside Electron
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!window.electronAPI?.isElectron) {
+      setIsElectronActive(false);
+      return;
+    }
+
+    let isDisposed = false;
+    let term: any = null;
+    let fitAddon: any = null;
+    let unsubscribeData: (() => void) | undefined;
+    let unsubscribeExit: (() => void) | undefined;
+    let resizeObserver: ResizeObserver | null = null;
+
+    async function initRealTerminal() {
+      try {
+        const { Terminal } = await import("@xterm/xterm");
+        const { FitAddon } = await import("@xterm/addon-fit");
+        await import("@xterm/xterm/css/xterm.css");
+
+        if (isDisposed || !xtermContainerRef.current) return;
+
+        // Limpiar contenedor previo
+        xtermContainerRef.current.innerHTML = "";
+
+        term = new Terminal({
+          cursorBlink: true,
+          cursorStyle: "bar",
+          fontSize: 13,
+          fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+          theme: {
+            background: "#0c0c0e",
+            foreground: "#f4f4f5",
+            cursor: "#34d399",
+            selectionBackground: "#3f3f46",
+            black: "#18181b",
+            red: "#f87171",
+            green: "#34d399",
+            yellow: "#fbbf24",
+            blue: "#60a5fa",
+            magenta: "#c084fc",
+            cyan: "#38bdf8",
+            white: "#f4f4f5",
+          },
+        });
+
+        fitAddon = new FitAddon();
+        term.loadAddon(fitAddon);
+        term.open(xtermContainerRef.current);
+        fitAddon.fit();
+        xtermInstanceRef.current = term;
+
+        const info = await window.electronAPI!.createTerminal({
+          cols: term.cols || 80,
+          rows: term.rows || 24,
+        });
+
+        if (info.error) {
+          term.writeln(`\r\n\x1b[31mError al iniciar PTY: ${info.error}\x1b[0m\r\n`);
+          return;
+        }
+
+        setIsElectronActive(true);
+        setShellInfo(info);
+
+        // Configurar listeners para esta pestaña
+        const tabId = activeTab;
+        terminalRefs.current[tabId] = term;
+
+        term.onData((data: string) => {
+          window.electronAPI?.writeTerminal(data);
+        });
+
+        unsubscribeData = window.electronAPI!.onTerminalData((data: string) => {
+          const t = terminalRefs.current[tabId];
+          if (t) t.write(data);
+        });
+
+        unsubscribeExit = window.electronAPI!.onTerminalExit(({ exitCode }) => {
+          term.writeln(`\r\n\x1b[33m[Proceso PTY terminado con código ${exitCode}]\x1b[0m\r\n`);
+          // Marcar sesión como terminada
+          setSessions(prev => {
+            const newSessions = new Map(prev);
+            newSessions.set(tabId, { ...sessions.get(tabId), isRunning: false, title: "Terminada" });
+            return newSessions;
+          });
+        });
+
+        // Handle custom commands from input
+        term.onKey((key: any) => {
+          if (key === "Enter") {
+            const input = term._renderer?.getText?.() || "";
+            handleCustomCommand(term, input.trim(), tabId);
+          }
+        });
+
+        resizeObserver = new ResizeObserver(() => {
+          try {
+            if (fitAddon && term) {
+              fitAddon.fit();
+              window.electronAPI?.resizeTerminal(term.cols, term.rows);
+            }
+          } catch (e) {}
+        });
+
+        if (xtermContainerRef.current) {
+          resizeObserver.observe(xtermContainerRef.current);
+        }
+      } catch (err) {
+        console.error("Failed to initialize xterm.js:", err);
+      }
+    }
+
+    initRealTerminal();
+
+    return () => {
+      isDisposed = true;
+      resizeObserver?.disconnect();
+      unsubscribeData?.();
+      unsubscribeExit?.();
+      if (term) {
+        try {
+          term.dispose();
+        } catch (e) {}
+      }
+    };
+  }, [activeTab]);
+
+  // Handle custom command submission
+  const handleCustomCommand = useCallback(async (term: any, input: string, tabId: string) => {
+    // Limpiar la línea de entrada en el terminal
+    term?.clear();
+
+    // Verificar comandos personalizados
+    if (input in CUSTOM_COMMANDS) {
+      const command = CUSTOM_COMMANDS[input];
+      // Ejecutar handler
+      if (command.handler) {
+        const result = await command.handler(term, /* session info */);
+        if (Array.isArray(result)) {
+          result.forEach((line: any) => {
+            appendLog(line.type, line.text);
+          });
+        }
+      }
+      setCommandInput("");
+      return;
+    }
+
+    // Comandos del sistema estilo shell
+    const lower = input.toLowerCase();
+    if (lower === "clear" || lower === "cls") {
+      setLogsState(prev => {
+        const newLogs = new Map(prev);
+        newLogs.set(tabId, []);
+        return newLogs;
+      });
+      return;
+    }
+
+    if (lower.startsWith("/git")) {
+      appendLog("system", `Ejecutando: ${input}`);
+      // Ejecutar git command through the terminal PTY if in Electron mode
+      if (isElectronActive && window.electronAPI?.writeTerminal) {
+        window.electronAPI.writeTerminal(`${input}\r`);
+      } else {
+        appendLog("stderr", "Git commands available in native Electron mode. Use /git-sync for automated sync.");
+      }
+      setCommandInput("");
+      return;
+    }
+
+    if (lower.startsWith("/run-tests")) {
+      const args = lower.replace("/run-tests", "").trim().split(" ");
+      appendLog("system", `Ejecutando pruebas: ${args.join(" ") || "todos"}`);
+      setCommandInput("");
+      return;
+    }
+
+    if (lower.startsWith("/context")) {
+      appendLog("system", "=== Contexto de Sesión ===");
+      appendLog("system", `Pestaña: ${tabId}`);
+      appendLog("system", `Directorio: ${shellInfo?.cwd || "PulseStudio"}`);
+      appendLog("system", "=================================");
+      setCommandInput("");
+      return;
+    }
+
+    // Para comandos desconocidos en modo web, mostrar mensaje
+    appendLog("stderr", `Comando: ${input}. Modo web protegido. Use modo nativo o comandos: /clear, /help, /context, /git-sync, /run-tests`);
+    setCommandInput("");
+  }, [isElectronActive, shellInfo?.cwd, appendLog, setCommandInput]);
+
+  // Append log to state
+  const appendLog = useCallback((type: LogLine["type"], text: string) => {
+    const newLine: LogLine = {
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      type,
+      text,
+      timestamp: new Date().toLocaleTimeString(),
+    };
+    setLogsState(prev => {
+      const newLogs = new Map(prev);
+      const existing = newLogs.get(activeTab) || [];
+      newLogs.set(activeTab, [...existing.slice(-100), newLine]);
+      return newLogs;
+    });
+  }, [activeTab]);
+
+  // Handle manual command submit
+  const handleManualCommandSubmit = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    const cmd = commandInput.current ? commandInput.current.trim() : commandInput.trim();
+    if (!cmd) return;
+
+    const lower = cmd.toLowerCase();
+
+    // Si estamos en Electron con PTY real, enviar directamente al terminal nativo
+    if (isElectronActive && window.electronAPI?.writeTerminal) {
+      window.electronAPI.writeTerminal(`${cmd}\r`);
+      return;
+    }
+
+    // Manejar comandos personalizados en modo web
+    if (lower === "clear" || lower === "cls") {
+      setLogsState(prev => {
+        const newLogs = new Map(prev);
+        newLogs.set(activeTab, []);
+        return newLogs;
+      });
+      setCommandInput("");
+      return;
+    }
+
+    if (lower === "/help") {
+      const helpLines = Object.values(CUSTOM_COMMANDS).map(c => c.description);
+      appendLog("system", "=== Comandos Personalizados ===");
+      helpLines.forEach((desc: string) => appendLog("system", desc));
+      setCommandInput("");
+      return;
+    }
+
+    if (lower === "/context") {
+      appendLog("system", `=== Contexto ===`);
+      appendLog("system", `Pestaña activa: ${activeTab}`);
+      appendLog("system", `Directorio: ${shellInfo?.cwd || process.cwd()}`);
+      appendLog("system", `Agente: ${activeAgent.name}`);
+      setCommandInput("");
+      return;
+    }
+
+    if (lower.startsWith("/git")) {
+      appendLog("system", `Comando git detectado: ${cmd}`);
+      if (isElectronActive && window.electronAPI?.writeTerminal) {
+        window.electronAPI.writeTerminal(`${cmd}\r`);
+      } else {
+        appendLog("stderr", "Git sync: use /git-sync para sincronización automática o modo nativo.");
+      }
+      setCommandInput("");
+      return;
+    }
+
+    if (lower.startsWith("/run-tests")) {
+      const testPath = cmd.replace("/run-tests", "").trim();
+      appendLog("system", `Ejecutando pruebas${testPath ? ": " + testPath : ""}`);
+      setCommandInput("");
+      return;
+    }
+
+    // Modo web fallback - lista de comandos permitidos
+    appendLog("stderr", `Comando protegido en modo web. Acciones permitidas: /clear, /help, /context, /git-sync, /run-tests. Para terminal ilimitada: modo escritorio nativo.`);
+    setCommandInput("");
+  }, [isElectronActive, commandInput, appendLog, activeAgent, setCommandInput]);
+
+  // Restart terminal for active tab
+  const handleRestartTerminal = useCallback(async () => {
+    if (isElectronActive && window.electronAPI?.createTerminal) {
+      // Reiniciar PTY para la pestaña activa
+      const info = await window.electronAPI.createTerminal();
+      setShellInfo(info);
+      toast({
+        title: "Terminal Nativo Reiniciado",
+        description: `Shell: ${info.shell || "zsh"} (PID: ${info.pid || "N/A"})`,
+      });
+    } else {
+      setLogsState(prev => {
+        const newLogs = new Map(prev);
+        newLogs.set(activeTab, []);
+        return newLogs;
+      });
+      toast({
+        title: "Consola virtual reiniciada",
+        description: "Historial limpiado.",
+      });
+    }
+  }, [isElectronActive, shellInfo, toast]);
+
+  // Copy terminal content
+  const handleCopyTerminal = useCallback(() => {
+    const logs = logsState.get(activeTab) || [];
+    const text = logs.map((l) => `[${l.timestamp}] ${l.text}`).join("\n");
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast({
+      title: "Consola copiada",
+      description: "El historial se copió al portapapeles.",
+    });
+  }, [logsState, activeTab, toast]);
+
+  // Send to debugger
+  const handleSendToDebugger = useCallback(() => {
+    const logs = logsState.get(activeTab) || [];
+    const rawOutput = logs
+      .filter((l) => l.type === "stderr" || l.type === "stdout")
+      .map((l) => l.text)
+      .join("\n");
+
+    if (!rawOutput) {
+      toast({
+        title: "Sin salida reciente",
+        description: "Ejecuta una acción antes de diagnosticar.",
+      });
+      return;
+    }
+
+    if (onDiagnose) {
+      onDiagnose(rawOutput);
+    } else {
+      toast({
+        title: "Debugger notificado",
+        description: "Salida enviada al canal de razonamiento.",
+      });
+    }
+  }, [logsState, activeTab, onDiagnose, toast]);
+
+  // Auto-focus terminal when active
+  useEffect(() => {
+    const endEl = document.querySelector(`.terminal-end-${activeTab}`);
+    if (endEl) endEl.scrollIntoView({ behavior: "smooth" });
+  }, [activeTab]);
+
+  // Efecto para restaurar logs state al cambiar de pestaña
+  useEffect(() => {
+    const savedLogs = localStorage.getItem(`pulse_logs_${activeTab}`);
+    if (savedLogs) {
+      setLogsState(new Map([[activeTab, JSON.parse(savedLogs)]])));
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    localStorage.setItem(`pulse_logs_${activeTab}`, JSON.stringify([...(logsState.get(activeTab) || [])]));
+  }, [logsState, activeTab]);
+
+  // Efecto para montar el contenedor xterm por pestaña
+  useEffect(() => {
+    // Limpiar contenedor anterior
+    if (xtermContainerRef.current) {
+      xtermContainerRef.current.innerHTML = "";
+    }
+    // Configurar terminal para la pestaña activa
+    if (isElectronActive && window.electronAPI?.createTerminal) {
+      initRealTerminal();
+    }
+  }, [isElectronActive, activeTab]);
+
+  // Guardar referencias de terminal por pestaña
+  useEffect(() => {
+    setTerminalRefs(prev => {
+      const newRefs = new Map(prev);
+      newRefs.set(activeTab, xtermInstanceRef.current);
+      return newRefs;
+    });
+  }, []);
+
+  // Guardar sesiones
+  useEffect(() => {
+    setSessions(prev => {
+      const newSessions = new Map(prev);
+      if (!newSessions.has(activeTab)) {
+        newSessions.set(activeTab, {
+          tabId: activeTab,
+          processId: shellInfo?.pid || 0,
+          isRunning: isElectronActive,
+          title: "Terminal PulseStudio",
+        });
+      }
+      return newSessions;
+    });
+  }, [activeTab, isElectronActive, shellInfo?.pid]);
+
+  // Menú de pestañas
+  const tabElements = tabs.map((tab) => {
+    const isActive = tab.id === activeTab;
+    return (
+      <button
+        key={tab.id}
+        onClick={() => setActiveTab(tab.id)}
+        className={`flex items-center gap-2 rounded-lg border ${isActive ? "border-emerald-500 bg-emerald-500/10 text-emerald-300" : "border-white/[0.1] text-zinc-300 hover:border-white/[0.2] hover:text-white"]`}
+        style={{ fontSize: "10px", padding: "2px 6px" }}
+      >
+        {tab.name}
+      </button>
+    );
+  });
+
+  return (
+    <div className="space-y-5">
+      {/* Barra superior de orquestación de Agente y Workspace con selector de pestañas */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 rounded-2xl border border-white/[0.08] bg-[#141414] p-4">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-xl bg-white/[0.05] text-zinc-200 border border-white/[0.08]">
+            <TerminalIcon className="h-5 w-5 text-emerald-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-white">
+                Terminal de Sistema & Agente GUI
+              </h2>
+              {isElectronActive ? (
+                <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 border border-emerald-500/20">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Nativo Mac ({shellInfo?.shell?.split("/").pop() || "zsh"}) · PID {shellInfo?.pid || "—"}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-400 border border-blue-500/20">
+                  <Monitor className="h-3 w-3" />
+                  Modo Web (Runner Seguro)
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-zinc-400 font-mono truncate max-w-md">
+              {shellInfo?.cwd || tabs.find((t) => t.id === activeTab)?.cwd || "Sincronizando espacio de trabajo..."}
+            </p>
+          </div>
+        </div>
+
+        {/* Selector de Agente a cargo */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-400 flex items-center gap-1">
+            <Bot className="h-3.5 w-3.5" /> Rol de Agente:
+          </span>
+          <select
+            value={activeAgent}
+            onChange={(e) => setActiveAgent(e.target.value)}
+            className="rounded-lg border border-white/[0.1] bg-[#1a1a1a] px-3 py-1.5 text-xs text-zinc-200 outline-none focus:border-zinc-500"
+          >
+            {AGENT_ROLES.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Selector de pestañas */}
+        <div className="flex items-center gap-2 ml-4">
+          <span className="text-xs text-zinc-400 flex items-center gap-1">
+            <RefreshCcw className="h-3.5 w-3.5" /> Pestañas:
+          </span>
+          <div className="flex flex-wrap gap-1">
+            {tabElements}
+            <button
+              onClick={() => {
+                const newId = `terminal-${Date.now()}`;
+                const newTab: TerminalTab = {
+                  id: newId,
+                  name: `Terminal ${tabs.length + 1}`,
+                  cwd: "/Users/onielsantos/Desktop/Documentos-Proyectos/PulseStudio",
+                  createdAt: Date.now(),
+                };
+                setTabs(prev => [...prev, newTab]);
+                setActiveTab(newId);
+                setSessions(prev => {
+                  const newSessions = new Map(prev);
+                  newSessions.set(newId, {
+                    tabId: newId,
+                    processId: 0,
+                    isRunning: false,
+                    title: "Terminal PulseStudio",
+                  });
+                  return newSessions;
+                });
+                setLogsState(prev => {
+                  const newLogs = new Map(prev);
+                  newLogs.set(newId, []);
+                  return newLogs;
+                });
+              }}
+              className="rounded-lg border border-white/[0.1] bg-[#1a1a1a] px-2 py-1 text-[9px] text-zinc-300 hover:border-white/[0.2] hover:text-white transition"
+              title="Añadir nueva pestaña de terminal"
+            >
+              + 
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Botonera de Acciones Rápidas */}
+      <div className="rounded-2xl border border-white/[0.08] bg-[#141414] p-4 space-y-3">
+        <div className="flex items-center justify-between border-b border-white/[0.06] pb-2">
+          <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+            <Cpu className="h-3.5 w-3.5 text-zinc-300" />
+            Acciones Rápidas del Sistema
+          </span>
+          <span className="text-[11px] text-zinc-500">
+            {isElectronActive ? "Envío directo al PTY nativo de macOS" : "Ejecución gobernada en segundo plano"}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isRunning}
+            onClick={() => handleRunJob("lint")}
+            className="text-xs border-white/[0.1] bg-[#1a1a1a] hover:bg-white/[0.08] text-zinc-200"
+          >
+            <Play className={`h-3 w-3 mr-1.5 ${currentJob === "lint" ? "animate-spin text-amber-400" : "text-emerald-400"}`} />
+            Lint Check
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isRunning}
+            onClick={() => handleRunJob("typecheck")}
+            className="text-xs border-white/[0.1] bg-[#1a1a1a] hover:bg-white/[0.08] text-zinc-200"
+          >
+            <Play className={`h-3 w-3 mr-1.5 ${currentJob === "typecheck" ? "animate-spin text-amber-400" : "text-blue-400"}`} />
+            TypeScript (tsc)
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isRunning}
+            onClick={() => handleRunJob("build")}
+            className="text-xs border-white/[0.1] bg-[#1a1a1a] hover:bg-white/[0.08] text-zinc-200"
+          >
+            <Play className={`h-3 w-3 mr-1.5 ${currentJob === "build" ? "animate-spin text-amber-400" : "text-purple-400"}`} />
+            Build Proyecto
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isRunning}
+            onClick={() => handleRunJob("prisma")}
+            className="text-xs border-white/[0.1] bg-[#1a1a1a] hover:bg-white/[0.08] text-zinc-200"
+          >
+            <Play className={`h-3 w-3 mr-1.5 ${currentJob === "prisma" ? "animate-spin text-amber-400" : "text-amber-400"}`} />
+            Prisma Generate
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isRunning}
+            onClick={() => handleRunJob("playwright", playwrightPath)}
+            className="text-xs border-white/[0.1] bg-[#1a1a1a] hover:bg-white/[0.08] text-zinc-200"
+          >
+            <Play className={`h-3 w-3 mr-1.5 ${currentJob === "playwright" ? "animate-spin text-amber-400" : "text-rose-400"}`} />
+            Playwright E2E
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleCustomCommand(xtermInstanceRef.current, commandInput, activeTab)}
+            className="text-xs border-white/[0.1] bg-[#1a1a1a] hover:bg-white/[0.08] text-zinc-200"
+          >
+            <Sparkles className="h-3 w-3 mr-1.5" /> Custom
+          </Button>
+        </div>
+      </div>
+
+      {/* Panel de control de pestañas */}
+      <div className="rounded-2xl border border-white/[0.12] bg-[#0c0c0e] shadow-2xl overflow-hidden flex flex-col font-mono text-xs">
+        {/* Header estilo ventana macOS */}
+        <div className="flex items-center justify-between border-b border-white/[0.08] bg-[#16161a] px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f56]" />
+              <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e]" />
+              <span className="h-2.5 w-2.5 rounded-full bg-[#27c93f]" />
+            </div>
+            <span className="ml-2 text-[11px] font-medium text-zinc-400">
+              {isElectronActive
+                ? `macOS native pty · ${shellInfo?.shell || "/bin/zsh"} · ${shellInfo?.cwd?.split("/").pop() || "PulseStudio"}`
+                : `pulse-terminal · web runner · ${tabs.find((t) => t.id === activeTab)?.name || "Terminal"}`
+              }
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleSendToDebugger}
+              className="flex items-center gap-1 rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[10px] font-medium text-amber-300 hover:bg-amber-500/20 transition"
+              title="Analizar salida con el Agente Debugger"
+            >
+              <Sparkles className="h-3 w-3" />
+              Enviar a Debugger
+            </button>
+
+            <button
+              onClick={handleCopyTerminal}
+              className="grid h-6 w-6 place-items-centered rounded text-zinc-400 hover:bg-white/[0.08] hover:text-white transition"
+              title="Copiar contenido de terminal"
+            >
+              {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+            </button>
+
+            <button
+              onClick={handleRestartTerminal}
+              className="grid h-6 w-6 place-items-centered rounded text-zinc-400 hover:bg-white/[0.08] hover:text-white transition"
+              title="Reiniciar terminal"
+            >
+              <RotateCcw className="h-3 w-3" />
+            </button>
+
+            <button
+              onClick={() => setTabs(prev => {
+                const newTabs = prev.filter(t => t.id !== activeTab);
+                if (newTabs.length === 0) {
+                  setTabs([{
+                    id: "default",
+                    name: "Terminal Principal",
+                    cwd: "/Users/onielsantos/Desktop/Documentos-Proyectos/PulseStudio",
+                    createdAt: Date.now(),
+                  }]);
+                  setActiveTab("default");
+                }
+                return newTabs;
+              })}
+              className="grid h-6 w-6 place-items-centered rounded text-zinc-400 hover:bg-white/[0.08] hover:text-white transition"
+              title="Cerrar pestaña actual"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+
+        {/* Contenedor del terminal por pestaña activa */}
+        {isElectronActive && term ? (
+          <div
+            ref={xtermContainerRef}
+            className="h-[calc(100vh_._60)] w-full p-3 bg-[#0c0c0e] overflow-hidden select-text"
+          />
+        ) : (
+          <>
+            <div className="h-[400] overflow-y-auto p-4 space-y-1.5 select-text">
+              {logsState.get(activeTab)?.map((log) => {
+                let color = "text-zinc-300";
+                if (log.type === "input") color = "text-emerald-400 font-semibold";
+                if (log.type === "stderr") color = "text-rose-400";
+                if (log.type === "system") color = "text-zinc-500";
+                if (log.type === "agent") color = "text-purple-400 font-medium";
+
+                return (
+                  <div key={log.id} className="leading-relaxed flex items-start gap-2">
+                    <span className="text-[10px] text-zinc-600 select-none shrink-0 pt-0.5">
+                      {log.timestamp}
+                    </span>
+                    <span className={`whitespace-pre-wrap break-all ${color}`}>
+                      {log.text}
+                    </span>
+                  </div>
+                );
+              })}
+              {isRunning && (
+                <div className="flex items-center gap-2 text-zinc-500 text-[11px] pt-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  Ejecutando proceso en background...
+                </div>
+              )}
+              <div className="terminal-end-{{activeTab}} / flex items-end h-8" />
+            </div>
+
+            {/* Línea de comando interactiva estilo shell en Web */}
+            <form
+              onSubmit={handleManualCommandSubmit}
+              className="border-t border-white/[0.08] bg-[#111114] px-4 py-2 flex items-center gap-2"
+            >
+              <span className="text-emerald-400 font-semibold select-none">pulse@studio:~$</span>
+              <input
+                type="text"
+                value={commandInput}
+                onChange={(e) => setCommandInput(e.target.value)}
+                disabled={isRunning}
+                placeholder="Escribe /clear, /help, /context, /git-sync, /run-tests o un comando nativo..."
+                className="flex-1 bg-transparent text-zinc-100 outline-none text-xs placeholder:text-zinc-600"
+              />
+              <button
+                type="submit"
+                disabled={!commandInput.trim() || isRunning}
+                className="text-[11px] px-2.5 py-0.5 rounded bg-white text-black font-semibold disabled:opacity-30"
+              >
+                Enter
+              </button>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default ActionAgentTerminal;

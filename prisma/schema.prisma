@@ -1,0 +1,121 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Agent {
+  id           String   @id @default(cuid())
+  name         String
+  description  String?
+  systemPrompt String?
+  createdAt    DateTime @default(now())
+}
+
+model ContextDocument {
+  id              String   @id @default(cuid())
+  projectName     String
+  moduleName      String
+  markdownContent String
+  tags            String   @default("[]")
+  sourceType      String?
+  notebookId      String?
+  createdAt       DateTime @default(now())
+  notebook        ContextNotebook? @relation(fields: [notebookId], references: [id], onDelete: Cascade)
+
+  @@index([notebookId, createdAt])
+}
+
+model ContextNotebook {
+  id        String            @id @default(cuid())
+  title     String
+  notes     String            @default("")
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  documents ContextDocument[]
+
+  @@index([updatedAt])
+}
+
+model ChatSession {
+  id        String        @id @default(cuid())
+  title     String        @default("Nueva conversación")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  ChatMessage[]
+
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model ChatMessage {
+  id        String     @id @default(cuid())
+  sessionId String
+  role      String
+  content   String
+  provider  String?
+  createdAt DateTime   @default(now())
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@index([createdAt])
+}
+
+model AgentActionLog {
+  id             String   @id @default(cuid())
+  storyReference String?
+  action         String
+  status         String   @default("DRAFT")
+  testCases      String
+  syncResult     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([status, createdAt])
+}
+
+model Proposal {
+  id            String   @id @default(uuid())
+  title         String
+  diff          String
+  reviews       String   @default("{}")
+  humanApproval String?
+  checkpoint    String?
+  branch        String?
+  applied       Boolean  @default(false)
+  published     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+}
+
+model RunnerExecution {
+  id            String   @id @default(uuid())
+  job           String   @default("lint")
+  testPath      String?
+  status        String   @default("pending")
+  output        String?
+  exitCode      Int?
+  durationMs    Int
+  timedOut      Boolean  @default(false)
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  projectProfile String?
+}
+
+model EnvironmentVariable {
+  id            String   @id @default(uuid())
+  key           String   @unique
+  value         String
+  environments  String   @default("[]")
+  projectId     String?  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

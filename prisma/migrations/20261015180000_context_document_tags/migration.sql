@@ -1,0 +1,1 @@
+ALTER TABLE "ContextDocument" ADD COLUMN "tags" TEXT NOT NULL DEFAULT '[]';

@@ -1,0 +1,333 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer components {
+  .add-menu-item {
+    @apply flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-zinc-300 transition hover:bg-white/[0.08] hover:text-white;
+  }
+
+  .add-menu-item svg {
+    @apply h-4 w-4 text-zinc-500;
+  }
+
+  .add-menu-item span {
+    @apply ml-auto text-[10px] text-zinc-600;
+  }
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+[data-theme="light"] [class~="bg-[#0b0b0b]"],
+[data-theme="light"] [class~="bg-[#0c0c0e]"],
+[data-theme="light"] [class~="bg-[#0d0d0f]"],
+[data-theme="light"] [class~="bg-[#0e0e0e]"],
+[data-theme="light"] [class~="bg-[#101012]"],
+[data-theme="light"] [class~="bg-[#111]"],
+[data-theme="light"] [class~="bg-[#111114]"],
+[data-theme="light"] [class~="bg-[#141414]"],
+[data-theme="light"] [class~="bg-[#16161a]"],
+[data-theme="light"] [class~="bg-[#181818]"] {
+  background-color: #f8fafc !important;
+}
+
+[data-theme="light"] [class~="bg-[#111111]"],
+[data-theme="light"] [class~="bg-[#111113]"],
+[data-theme="light"] [class~="bg-[#1a1a1a]"],
+[data-theme="light"] [class~="bg-[#1b1b1b]"] {
+  background-color: #f1f5f9 !important;
+}
+
+[data-theme="light"] [class~="bg-[#151515]"],
+[data-theme="light"] [class~="bg-[#171717]"],
+[data-theme="light"] [class~="bg-[#202020]"],
+[data-theme="light"] [class~="bg-zinc-900"],
+[data-theme="light"] [class~="bg-zinc-800"],
+[data-theme="light"] [class~="bg-zinc-700"],
+[data-theme="light"] [class~="bg-slate-900"],
+[data-theme="light"] [class~="bg-slate-950"],
+[data-theme="light"] [class~="bg-slate-800/50"],
+[data-theme="light"] [class~="bg-black/20"],
+[data-theme="light"] [class~="bg-black/30"] {
+  background-color: #ffffff !important;
+}
+
+[data-theme="light"] [class~="bg-white/[0.025]"],
+[data-theme="light"] [class~="bg-white/[0.04]"],
+[data-theme="light"] [class~="bg-white/[0.05]"],
+[data-theme="light"] [class~="bg-white/[0.07]"],
+[data-theme="light"] [class~="bg-white/[0.06]"],
+[data-theme="light"] [class~="bg-white/[0.08]"],
+[data-theme="light"] [class~="bg-white/[0.12]"],
+[data-theme="light"] [class~="bg-white/[0.1]"] {
+  background-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] [class*="bg-[#0b0b0b]/"],
+[data-theme="light"] [class*="bg-[#0d0d0f]/"],
+[data-theme="light"] [class*="bg-[#171717]/"] {
+  background-color: rgb(248 250 252 / 94%) !important;
+}
+
+[data-theme="light"] [class~="border-white/[0.06]"],
+[data-theme="light"] [class~="border-white/[0.05]"],
+[data-theme="light"] [class~="border-white/[0.07]"],
+[data-theme="light"] [class~="border-white/[0.08]"],
+[data-theme="light"] [class~="border-white/[0.1]"],
+[data-theme="light"] [class~="border-white/[0.12]"],
+[data-theme="light"] [class~="border-white/[0.13]"],
+[data-theme="light"] [class~="border-white/[0.18]"],
+[data-theme="light"] [class~="border-white/[0.2]"],
+[data-theme="light"] [class~="border-white/[0.25]"] {
+  border-color: #dbe3ed !important;
+}
+
+[data-theme="light"] [class~="text-zinc-50"],
+[data-theme="light"] [class~="text-white"],
+[data-theme="light"] [class~="text-zinc-100"],
+[data-theme="light"] [class~="text-zinc-200"],
+[data-theme="light"] [class~="text-zinc-300"] {
+  color: #18181b !important;
+}
+
+[data-theme="light"] [class~="text-zinc-400"],
+[data-theme="light"] [class~="text-zinc-500"],
+[data-theme="light"] [class~="text-zinc-600"],
+[data-theme="light"] [class~="text-zinc-700"] {
+  color: #52525b !important;
+}
+
+[data-theme="light"] [class~="text-slate-100"],
+[data-theme="light"] [class~="text-slate-200"],
+[data-theme="light"] [class~="text-slate-300"] {
+  color: #18181b !important;
+}
+
+[data-theme="light"] [class~="text-slate-400"],
+[data-theme="light"] [class~="text-slate-500"] {
+  color: #52525b !important;
+}
+
+[data-theme="light"] [class~="text-blue-200"],
+[data-theme="light"] [class~="text-blue-300"] {
+  color: #1d4ed8 !important;
+}
+
+[data-theme="light"] [class~="text-amber-200"] {
+  color: #92400e !important;
+}
+
+[data-theme="light"] [class~="text-emerald-200"] {
+  color: #166534 !important;
+}
+
+[data-theme="light"] [class~="bg-blue-600"][class~="text-white"],
+[data-theme="light"] [class~="bg-blue-700"][class~="text-white"],
+[data-theme="light"] [class~="bg-blue-600"] [class~="text-white"],
+[data-theme="light"] [class~="bg-blue-700"] [class~="text-white"] {
+  color: #ffffff !important;
+}
+
+[data-theme="light"] [class~="hover:bg-white/[0.05]"]:hover,
+[data-theme="light"] [class~="hover:bg-white/[0.06]"]:hover,
+[data-theme="light"] [class~="hover:bg-white/[0.08]"]:hover {
+  background-color: #e2e8f0 !important;
+}
+
+.devdocs-article[data-reading-size="small"] [class~="text-xs"],
+.devdocs-article[data-reading-size="small"] [class~="text-sm"],
+.devdocs-article[data-reading-size="small"] [class~="text-base"],
+.devdocs-article[data-reading-size="small"] [class~="text-[9px]"]:not(pre),
+.devdocs-article[data-reading-size="small"] [class~="text-[10px]"]:not(pre),
+.devdocs-article[data-reading-size="small"] [class~="text-[11px]"]:not(pre) {
+  font-size: 0.875rem !important;
+}
+
+.devdocs-article[data-reading-size="medium"] [class~="text-xs"],
+.devdocs-article[data-reading-size="medium"] [class~="text-sm"],
+.devdocs-article[data-reading-size="medium"] [class~="text-base"],
+.devdocs-article[data-reading-size="medium"] [class~="text-[9px]"]:not(pre),
+.devdocs-article[data-reading-size="medium"] [class~="text-[10px]"]:not(pre),
+.devdocs-article[data-reading-size="medium"] [class~="text-[11px]"]:not(pre) {
+  font-size: 1rem !important;
+}
+
+.devdocs-article[data-reading-size="large"] [class~="text-xs"],
+.devdocs-article[data-reading-size="large"] [class~="text-sm"],
+.devdocs-article[data-reading-size="large"] [class~="text-base"],
+.devdocs-article[data-reading-size="large"] [class~="text-[9px]"]:not(pre),
+.devdocs-article[data-reading-size="large"] [class~="text-[10px]"]:not(pre),
+.devdocs-article[data-reading-size="large"] [class~="text-[11px]"]:not(pre) {
+  font-size: 1.125rem !important;
+}
+
+.devdocs-article[data-reading-size="small"] [class~="text-lg"] {
+  font-size: 1.125rem !important;
+}
+
+.devdocs-article[data-reading-size="medium"] [class~="text-lg"] {
+  font-size: 1.25rem !important;
+}
+
+.devdocs-article[data-reading-size="large"] [class~="text-lg"] {
+  font-size: 1.5rem !important;
+}
+
+.devdocs-article[data-reading-size="small"] [class~="text-3xl"] {
+  font-size: 1.875rem !important;
+}
+
+.devdocs-article[data-reading-size="medium"] [class~="text-3xl"] {
+  font-size: 2rem !important;
+}
+
+.devdocs-article[data-reading-size="large"] [class~="text-3xl"] {
+  font-size: 2.5rem !important;
+}
+
+.devdocs-article[data-reading-size="small"] [class~="text-4xl"],
+.devdocs-article[data-reading-size="small"] [class~="sm:text-4xl"] {
+  font-size: 2.25rem !important;
+}
+
+.devdocs-article[data-reading-size="medium"] [class~="text-4xl"],
+.devdocs-article[data-reading-size="medium"] [class~="sm:text-4xl"] {
+  font-size: 2.5rem !important;
+}
+
+.devdocs-article[data-reading-size="large"] [class~="text-4xl"],
+.devdocs-article[data-reading-size="large"] [class~="sm:text-4xl"] {
+  font-size: 3rem !important;
+}
