@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { localApiAuthorizationError } from '@/lib/local-api-auth'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -30,6 +31,8 @@ function cleanTags(value: unknown) {
 }
 
 export async function GET(request: Request) {
+  const authorizationError = localApiAuthorizationError(request);
+  if (authorizationError) return authorizationError;
   try {
     const { searchParams } = new URL(request.url)
     const notebookId = searchParams.get("notebookId")
@@ -38,13 +41,15 @@ export async function GET(request: Request) {
       orderBy: { createdAt: 'desc' },
     })
     return NextResponse.json(documents)
-  } catch (error) {
-    console.error('Context list failed', error)
+  } catch {
+    console.error('Context list failed')
     return NextResponse.json({ error: 'No se pudo leer la biblioteca de contexto. Ejecuta npm run db:push.' }, { status: 500 })
   }
 }
 
 export async function POST(request: Request) {
+  const authorizationError = localApiAuthorizationError(request);
+  if (authorizationError) return authorizationError;
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== 'object') return NextResponse.json({ error: 'JSON body required' }, { status: 400 })
   const { projectName, moduleName, markdownContent, tags, notebookId, sourceType } = body
@@ -82,13 +87,15 @@ export async function POST(request: Request) {
       },
     })
     return NextResponse.json(document, { status: 201 })
-  } catch (error) {
-    console.error('Context create failed', error)
+  } catch {
+    console.error('Context create failed')
     return NextResponse.json({ error: 'No se pudo guardar el contexto.' }, { status: 500 })
   }
 }
 
 export async function PUT(request: Request) {
+  const authorizationError = localApiAuthorizationError(request);
+  if (authorizationError) return authorizationError;
   const body = await request.json().catch(() => null)
   if (!validDocument(body) || !body.id || typeof body.id !== 'string') {
     return NextResponse.json({ error: 'id, projectName, moduleName and markdownContent are required' }, { status: 400 })
@@ -112,6 +119,8 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const authorizationError = localApiAuthorizationError(request);
+  if (authorizationError) return authorizationError;
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
 

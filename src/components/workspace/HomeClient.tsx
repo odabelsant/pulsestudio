@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { apiFetch } from "@/lib/api-fetch";
 import AttachContextList from "@/components/attach/AttachContextList";
 import ApprovedRunner from "@/components/runner/ApprovedRunner";
 import ChangeProposals from "@/components/governance/ChangeProposals";
@@ -10,11 +11,11 @@ import ActionAgentTerminal from "@/components/terminal/ActionAgentTerminal";
 import AlmSettingsView from "@/components/alm/AlmSettingsView";
 import ContextLibraryView from "@/components/context/ContextLibraryView";
 import ActionAgentBoard from "@/components/agent/ActionAgentBoard";
+import type { ActionContextDocument } from "@/lib/action-context";
 import WorkspaceIDE from "@/components/ide/WorkspaceIDE";
 import MCPManagerView from "@/components/mcp/MCPManagerView";
 import UnifiedHistoryView, { type HistorySession } from "@/components/history/UnifiedHistoryView";
 import ChatInterface, { ContextMentionInput, type ChatMessage, type MentionSource } from "@/components/chat/ChatInterface";
-import DevDocsModal from "@/components/docs/DevDocsModal";
 import WorkspaceShell from "@/components/workspace/WorkspaceShell";
 import {
   existingSectionByModule,
@@ -23,15 +24,12 @@ import {
 } from "@/components/workspace/modules";
 import {
   CheckCircle2,
-  BookOpen,
   ChevronDown,
   Code2,
   FileText,
   Key,
-  Moon,
   Plus,
   Send,
-  Sun,
   Terminal,
   Wrench,
   X,
@@ -54,32 +52,7 @@ const moduleBySection: Record<Section, WorkspaceModuleId> = {
   agent: "action_agent",
   history: "historial",
 };
-type Theme = "dark" | "light";
 type Message = ChatMessage;
-const THEME_STORAGE_KEY = "pulsestudio-theme";
-const themeListeners = new Set<() => void>();
-
-function subscribeToTheme(listener: () => void) {
-  themeListeners.add(listener);
-  window.addEventListener("storage", listener);
-  return () => {
-    themeListeners.delete(listener);
-    window.removeEventListener("storage", listener);
-  };
-}
-
-function getThemeSnapshot(): Theme {
-  return window.localStorage.getItem(THEME_STORAGE_KEY) === "light" ? "light" : "dark";
-}
-
-function getServerThemeSnapshot(): Theme {
-  return "dark";
-}
-
-function saveTheme(theme: Theme) {
-  window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-  themeListeners.forEach((listener) => listener());
-}
 
 const thinkingMessages = [
   "🧠 Analizando petición...",
@@ -111,12 +84,11 @@ export default function HomeClient({
   const [attached, setAttached] = useState<ContextDocument[]>([]);
   const [activeNotebookId, setActiveNotebookId] = useState<string | null>(null);
   const [mentionSources, setMentionSources] = useState<MentionSource[]>([]);
+  const [actionContextSources, setActionContextSources] = useState<ActionContextDocument[]>([]);
   const [mentionedDocumentIds, setMentionedDocumentIds] = useState<string[]>([]);
   const [mcpContext, setMcpContext] = useState("");
   const [activeSection, setActiveSection] = useState<Section>(initialSection);
   const [showAddMenu, setShowAddMenu] = useState(false);
-  const [devDocsOpen, setDevDocsOpen] = useState(false);
-  const theme = useSyncExternalStore(subscribeToTheme, getThemeSnapshot, getServerThemeSnapshot);
   const [notification, setNotification] = useState<string | null>(null);
   const [notificationType, setNotificationType] = useState<"success" | "error">("success");
   const [responseText, setResponseText] = useState("");
@@ -135,13 +107,6 @@ export default function HomeClient({
   const activeModule = moduleBySection[activeSection];
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    return () => {
-      delete document.documentElement.dataset.theme;
-    };
-  }, [theme]);
-
-  useEffect(() => {
     if (!isStreaming) return;
     const intervalId = window.setInterval(() => {
       setThinkingStep((step) => Math.min(step + 1, thinkingMessages.length - 1));
@@ -157,7 +122,7 @@ export default function HomeClient({
   async function ensureChatSession(title: string): Promise<string> {
     if (chatSessionIdRef.current) return chatSessionIdRef.current;
     if (!chatSessionPromiseRef.current) {
-      chatSessionPromiseRef.current = fetch("/api/history", {
+      chatSessionPromiseRef.current = apiFetch("/api/history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "create-session", title: title.slice(0, 160) }),
@@ -203,7 +168,7 @@ export default function HomeClient({
     if (!sanitizedSessionId || !sanitizedContent) {
       throw new Error("No se guardó el mensaje: la sesión o el contenido están vacíos.");
     }
-    const response = await fetch("/api/history", {
+    const response = await apiFetch("/api/history", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -227,7 +192,7 @@ export default function HomeClient({
   useEffect(() => {
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => {
-      fetch("/api/history", { signal: controller.signal, cache: "no-store" })
+      apiFetch("/api/history", { signal: controller.signal, cache: "no-store" })
         .then((response) => {
           if (!response.ok) throw new Error("No se pudo ejecutar la limpieza del historial.");
         })
@@ -244,7 +209,7 @@ export default function HomeClient({
   }, []);
 
   useEffect(() => {
-    fetch("/api/brain")
+    apiFetch("/api/brain")
       .then(async (response) => {
         if (!response.ok) throw new Error("No se pudo cargar el cerebro local.");
         return response.json() as Promise<{ agents: BrainArtifact[]; skills: BrainArtifact[] }>;
@@ -287,7 +252,7 @@ export default function HomeClient({
     setIsStreaming(true);
     setNotification(null);
     try {
-      const response = await fetch("/api/chat", {
+      const response = await apiFetch("/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt,
@@ -387,37 +352,38 @@ export default function HomeClient({
   }
 
   return (
-    <div data-theme={theme} className="min-h-screen bg-[#080D10] text-zinc-100">
-      <WorkspaceShell
-        activeModule={activeModule}
-        onSelectModule={selectWorkspaceModule}
-        onNewConversation={startNewConversation}
-        headerActions={
-          <>
-            <button
-              type="button"
-              onClick={() => setDevDocsOpen(true)}
-              className="grid h-8 w-8 place-items-center rounded-lg border border-[#223039] text-[#A6B5BE] transition hover:bg-[#141F25] hover:text-[#E8F0F3]"
-              aria-label="Abrir documentación"
-              title="Documentación de PulseStudio"
+    <WorkspaceShell
+      activeModule={activeModule}
+      onSelectModule={selectWorkspaceModule}
+      onNewConversation={startNewConversation}
+      headerActions={
+        <>
+          <select
+            aria-label="Proveedor de IA"
+            value={provider}
+            onChange={(event) => changeProvider(event.target.value as "ollama" | "google")}
+            className="hidden rounded-md border border-[#223039] bg-[#10181D] px-2 py-1.5 text-xs text-[#A6B5BE] outline-none focus:border-[#30434D] sm:block"
+          >
+            <option value="ollama">Ollama local</option>
+            <option value="google">Google Gemini</option>
+          </select>
+          <div className="relative hidden sm:block">
+            <select
+              aria-label="Modelo"
+              value={modelId}
+              onChange={(event) => setModelId(event.target.value)}
+              className="appearance-none rounded-md border border-[#223039] bg-[#10181D] py-1.5 pl-3 pr-8 text-xs text-[#E8F0F3] outline-none focus:border-[#30434D]"
             >
-              <BookOpen className="h-4 w-4" />
-            </button>
-              <button
-                type="button"
-                onClick={() => saveTheme(theme === "dark" ? "light" : "dark")}
-                className="grid h-8 w-8 place-items-center rounded-lg border border-[#223039] text-[#A6B5BE] transition hover:bg-[#141F25] hover:text-[#E8F0F3]"
-                aria-label={`Cambiar a tema ${theme === "dark" ? "claro" : "oscuro"}`}
-                aria-pressed={theme === "light"}
-                title={`Cambiar a tema ${theme === "dark" ? "claro" : "oscuro"}`}
-              >
-                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </button>
-              <select aria-label="Proveedor de IA" value={provider} onChange={(event) => changeProvider(event.target.value as "ollama" | "google")} className="hidden rounded-md border border-[#223039] bg-[#10181D] px-2 py-1.5 text-xs text-[#A6B5BE] outline-none focus:border-[#30434D] sm:block"><option value="ollama">Ollama local</option><option value="google">Google Gemini</option></select>
-              <div className="relative hidden sm:block"><select aria-label="Modelo" value={modelId} onChange={(event) => setModelId(event.target.value)} className="appearance-none rounded-md border border-[#223039] bg-[#10181D] py-1.5 pl-3 pr-8 text-xs text-[#E8F0F3] outline-none focus:border-[#30434D]"><option value={modelId}>{selectedModel?.label || "Seleccionar modelo"}</option>{models.filter((model) => model.id !== modelId).map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select><ChevronDown className="pointer-events-none absolute right-2 top-2 h-3.5 w-3.5 text-[#758792]" /></div>
-          </>
-        }
-      >
+              <option value={modelId}>{selectedModel?.label || "Seleccionar modelo"}</option>
+              {models.filter((model) => model.id !== modelId).map((model) => (
+                <option key={model.id} value={model.id}>{model.label}</option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2 top-2 h-3.5 w-3.5 text-[#758792]" />
+          </div>
+        </>
+      }
+    >
           {activeSection === "chat" && <section className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-5 sm:px-8">
             <div className="flex flex-1 flex-col py-10">
               <ChatInterface
@@ -456,7 +422,7 @@ export default function HomeClient({
             </div>
           </section>}
 
-          {activeSection === "context" && <Panel title="Cerebro de Contexto" description="Organiza cuadernos y fuentes para inyección inteligente en Chat y Action Agent."><ContextLibraryView onActiveNotebookChange={setActiveNotebookId} onSourcesChange={setMentionSources} onAttach={(doc) => { setAttached((current) => current.some((item) => item.id === doc.id) ? current : [...current, doc]); setActiveSection("chat"); showNotification(`${doc.moduleName} se añadió al chat.`); }} /><div className="mt-6 border-t border-white/[0.08] pt-6"><h2 className="mb-3 text-sm font-semibold text-white">Adjuntar otros documentos</h2><AttachContextList onAttach={(doc) => { setAttached((current) => current.some((item) => item.id === doc.id) ? current : [...current, doc]); setActiveSection("chat"); showNotification(`${doc.moduleName} se añadió al chat.`); }} onError={(message) => showNotification(message, "error")} /></div></Panel>}
+          {activeSection === "context" && <Panel title="Cerebro de Contexto" description="Organiza cuadernos y fuentes para inyección inteligente en Chat y Action Agent."><ContextLibraryView onActiveNotebookChange={setActiveNotebookId} onSourcesChange={(sources) => { setMentionSources(sources); setActionContextSources(sources.filter((source) => /\.(md|mdx)$/i.test(source.moduleName)).map((source) => ({ id: source.id, title: source.moduleName, markdownContent: source.markdownContent }))); }} onAttach={(doc) => { setAttached((current) => current.some((item) => item.id === doc.id) ? current : [...current, doc]); setActiveSection("chat"); showNotification(`${doc.moduleName} se añadió al chat.`); }} /><div className="mt-6 border-t border-white/[0.08] pt-6"><h2 className="mb-3 text-sm font-semibold text-white">Adjuntar otros documentos</h2><AttachContextList onAttach={(doc) => { setAttached((current) => current.some((item) => item.id === doc.id) ? current : [...current, doc]); setActiveSection("chat"); showNotification(`${doc.moduleName} se añadió al chat.`); }} onError={(message) => showNotification(message, "error")} /></div></Panel>}
           {activeSection === "skills" && <Panel title="Skills activos" description="Activa únicamente las instrucciones que quieres aplicar a esta conversación."><div className="space-y-2">{skills.map((skill) => <label key={skill.id} className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/[0.08] bg-[#151515] p-4 transition hover:bg-[#1b1b1b]"><input type="checkbox" checked={skillIds.includes(skill.id)} onChange={() => toggleSkill(skill.id)} className="mt-0.5 h-4 w-4 accent-white" /><span><span className="block text-sm font-medium text-zinc-100">{skill.name}</span><span className="mt-1 block text-sm leading-6 text-zinc-500">{skill.description}</span></span></label>)}</div></Panel>}
           {activeSection === "runner" && <Panel title="Ejecuciones seguras" description="Verifica el proyecto sin abrir otra herramienta."><ApprovedRunner onDiagnose={diagnoseRunnerOutput} /></Panel>}
           {activeSection === "ide" && (
@@ -486,11 +452,9 @@ export default function HomeClient({
           {activeSection === "env" && <Panel title="Variables de Entorno y Secretos" description="Gestión centralizada estilo Vercel de credenciales y configuración por entorno (Development, Preview, Production)."><EnvironmentVariablesPanel /></Panel>}
           {activeSection === "terminal" && <Panel title="Terminal & Agente de Acciones en Vivo" description="Consola interactiva gobernada y despacho de tareas asistidas por IA para el proyecto objetivo."><ActionAgentTerminal onDiagnose={diagnoseRunnerOutput} notebookId={activeNotebookId} provider={provider} model={modelId} /></Panel>}
           {activeSection === "alm" && <Panel title="Conexiones ALM" description="Configura conexiones seguras con Azure DevOps y Jira para integrar el ciclo de vida del trabajo."><AlmSettingsView /></Panel>}
-          {activeSection === "agent" && <Panel title="Action Agent · Pizarra QA" description="Genera y revisa casos de prueba con las reglas relevantes del Cerebro antes de sincronizar."><ActionAgentBoard provider={provider} model={modelId} notebookId={activeNotebookId} mcpContext={mcpContext} /></Panel>}
+          {activeSection === "agent" && <Panel title="Action Agent · Pizarra QA" description="Prepara borradores de QA con contexto trazable; las escrituras externas permanecen deshabilitadas."><ActionAgentBoard provider={provider} model={modelId} notebookId={activeNotebookId} mcpContext={mcpContext} contextSources={actionContextSources} /></Panel>}
           {activeSection === "history" && <Panel title="Historial unificado" description="Consulta conversaciones guardadas y la auditoría de ejecuciones de Action Agent."><UnifiedHistoryView onOpenSession={openHistorySession} /></Panel>}
-      </WorkspaceShell>
-      <DevDocsModal open={devDocsOpen} onClose={() => setDevDocsOpen(false)} theme={theme} onThemeToggle={() => saveTheme(theme === "dark" ? "light" : "dark")} />
-    </div>
+    </WorkspaceShell>
   );
 }
 

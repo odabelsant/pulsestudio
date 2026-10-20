@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/lib/api-fetch";
 import type { MentionSource } from "@/components/chat/ChatInterface";
 
 export interface ContextDocument extends MentionSource {
@@ -78,7 +79,7 @@ export default function ContextLibraryView({
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/context/notebooks", { signal, cache: "no-store" });
+      const response = await apiFetch("/api/context/notebooks", { signal, cache: "no-store" });
       const result: unknown = await response.json();
       if (!response.ok || !Array.isArray(result)) {
         throw new Error(errorFromResult(result, "No se pudieron cargar los cuadernos."));
@@ -96,7 +97,7 @@ export default function ContextLibraryView({
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/context?notebookId=${encodeURIComponent(notebookId)}`, { cache: "no-store" });
+      const response = await apiFetch(`/api/context?notebookId=${encodeURIComponent(notebookId)}`, { cache: "no-store" });
       const result: unknown = await response.json();
       if (!response.ok || !Array.isArray(result)) {
         throw new Error(errorFromResult(result, "No se pudieron cargar las fuentes del cuaderno."));
@@ -151,7 +152,7 @@ export default function ContextLibraryView({
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch("/api/context/notebooks", {
+      const response = await apiFetch("/api/context/notebooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title }),
@@ -179,7 +180,7 @@ export default function ContextLibraryView({
     setError(null);
     setNotice(null);
     try {
-      const response = await fetch("/api/context/notebooks", {
+      const response = await apiFetch("/api/context/notebooks", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -210,7 +211,7 @@ export default function ContextLibraryView({
     if (!window.confirm(`¿Eliminar el cuaderno "${notebook.title}" y todas sus fuentes?`)) return;
     setError(null);
     try {
-      const response = await fetch(`/api/context/notebooks?id=${encodeURIComponent(notebook.id)}`, { method: "DELETE" });
+      const response = await apiFetch(`/api/context/notebooks?id=${encodeURIComponent(notebook.id)}`, { method: "DELETE" });
       const result: unknown = await response.json();
       if (!response.ok) throw new Error(errorFromResult(result, "No se pudo eliminar el cuaderno."));
       setNotebooks((current) => current.filter((item) => item.id !== notebook.id));
@@ -228,7 +229,7 @@ export default function ContextLibraryView({
     setError(null);
     setNotice(null);
     try {
-      const response = await fetch("/api/context", {
+      const response = await apiFetch("/api/context", {
         method: editingSourceId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -273,7 +274,7 @@ export default function ContextLibraryView({
   async function deleteSource(document: ContextDocument) {
     if (!window.confirm(`¿Eliminar la fuente "${document.moduleName}"?`)) return;
     try {
-      const response = await fetch(`/api/context?id=${encodeURIComponent(document.id)}`, { method: "DELETE" });
+      const response = await apiFetch(`/api/context?id=${encodeURIComponent(document.id)}`, { method: "DELETE" });
       const result: unknown = await response.json();
       if (!response.ok) throw new Error(errorFromResult(result, "No se pudo eliminar la fuente."));
       const nextDocuments = documents.filter((item) => item.id !== document.id);
@@ -303,7 +304,7 @@ export default function ContextLibraryView({
       form.set("projectName", activeNotebook.title);
       form.set("paths", JSON.stringify(files.map((file) => file.name)));
       files.forEach((file) => form.append("files", file));
-      const response = await fetch("/api/context/import", { method: "POST", body: form });
+      const response = await apiFetch("/api/context/import", { method: "POST", body: form });
       const result: unknown = await response.json();
       if (
         !response.ok ||

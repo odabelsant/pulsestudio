@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/lib/api-fetch";
 
 type RunnerJob = "lint" | "build" | "playwright";
 
@@ -12,12 +13,15 @@ type WorkspaceStatus = {
 };
 
 type RunResult = {
+  executionId: string;
+  approvalId: string;
   job: RunnerJob;
   command: string;
   output: string;
   exitCode: number | null;
   durationMs: number;
   timedOut: boolean;
+  status: "COMPLETED" | "FAILED" | "UNKNOWN";
 };
 
 const JOBS: { id: RunnerJob; label: string; description: string }[] = [
@@ -34,7 +38,7 @@ export default function ApprovedRunner({ onDiagnose }: { onDiagnose: (output: st
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/runner")
+    apiFetch("/api/runner")
       .then(async (response) => {
         if (!response.ok) throw new Error("No se pudo consultar el workspace.");
         return response.json() as Promise<WorkspaceStatus>;
@@ -48,10 +52,33 @@ export default function ApprovedRunner({ onDiagnose }: { onDiagnose: (output: st
     setError(null);
     setResult(null);
     try {
-      const response = await fetch("/api/runner", {
+      const selectedPath = job === "playwright" && testPath.trim() ? testPath.trim() : undefined;
+      const action = JOBS.find((item) => item.id === job);
+      const preview = [
+        `Trabajo: ${action?.label ?? job}`,
+        `Workspace: ${status?.workspace ?? "desconocido"}`,
+        ...(selectedPath ? [`Test: ${selectedPath}`] : []),
+      ].join("\n");
+      if (!window.confirm(`Revisa y aprueba esta ejecución:\n\n${preview}`)) return;
+
+      const approvalResponse = await apiFetch("/api/runner", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job, ...(job === "playwright" && testPath.trim() ? { testPath: testPath.trim() } : {}) }),
+        body: JSON.stringify({ action: "authorize", job, ...(selectedPath ? { testPath: selectedPath } : {}) }),
+      });
+      const approval = await approvalResponse.json() as { approvalId?: string; error?: string };
+      if (!approvalResponse.ok || !approval.approvalId) {
+        throw new Error(approval.error ?? "No se pudo registrar la aprobación.");
+      }
+      const response = await apiFetch("/api/runner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "execute",
+          job,
+          approvalId: approval.approvalId,
+          ...(selectedPath ? { testPath: selectedPath } : {}),
+        }),
       });
       const data = await response.json() as RunResult | { error: string };
       if (!response.ok || "error" in data) throw new Error("error" in data ? data.error : "La ejecución falló.");
@@ -91,7 +118,7 @@ export default function ApprovedRunner({ onDiagnose }: { onDiagnose: (output: st
       {result && (
         <div className="mt-4 rounded-lg border border-slate-700 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-            <span className={result.exitCode === 0 && !result.timedOut ? "text-emerald-300" : "text-rose-300"}>{result.exitCode === 0 && !result.timedOut ? "Correcto" : "Requiere revisión"}</span>
+            <span className={result.exitCode === 0 && !result.timedOut && result.status === "COMPLETED" ? "text-emerald-300" : "text-rose-300"}>{result.exitCode === 0 && !result.timedOut && result.status === "COMPLETED" ? "Correcto" : "Requiere revisión"}</span>
             <span className="text-slate-400">{result.command} · {(result.durationMs / 1000).toFixed(1)} s</span>
           </div>
           <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap rounded bg-black/30 p-3 text-xs text-slate-200">{result.output}</pre>

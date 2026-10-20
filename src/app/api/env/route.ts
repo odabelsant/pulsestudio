@@ -1,25 +1,17 @@
 import { NextResponse } from "next/server";
-import { timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { adminApiAuthorizationError, localApiAuthorizationError } from "@/lib/local-api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function authorized(request: Request) {
-  const expected = process.env.PULSE_ADMIN_TOKEN;
-  if (!expected) return true;
-  const received = request.headers.get("x-pulse-admin-token");
-  if (!received) return false;
-  return Boolean(
-    expected.length === received.length &&
-      timingSafeEqual(Buffer.from(expected), Buffer.from(received))
-  );
+function authorizationError(request: Request) {
+  return localApiAuthorizationError(request) ?? adminApiAuthorizationError(request);
 }
 
 export async function GET(request: Request) {
-  if (!authorized(request)) {
-    return NextResponse.json({ error: "Token administrativo inválido." }, { status: 401 });
-  }
+  const error = authorizationError(request);
+  if (error) return error;
 
   const { searchParams } = new URL(request.url);
   const revealId = searchParams.get("reveal");
@@ -63,16 +55,15 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(formatted);
-  } catch (error) {
-    console.error("Error al listar variables:", error);
+  } catch {
+    console.error("Error al listar variables.");
     return NextResponse.json({ error: "Error al listar variables." }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
-  if (!authorized(request)) {
-    return NextResponse.json({ error: "Token administrativo inválido." }, { status: 401 });
-  }
+  const error = authorizationError(request);
+  if (error) return error;
   try {
     const body = await request.json();
     const { key, value, environments, projectId } = body;
@@ -112,16 +103,15 @@ export async function POST(request: Request) {
       projectId: variable.projectId,
       updatedAt: variable.updatedAt,
     }, { status: 201 });
-  } catch (error) {
-    console.error("Error al guardar variable:", error);
+  } catch {
+    console.error("Error al guardar variable.");
     return NextResponse.json({ error: "Error al guardar variable." }, { status: 500 });
   }
 }
 
 export async function DELETE(request: Request) {
-  if (!authorized(request)) {
-    return NextResponse.json({ error: "Token administrativo inválido." }, { status: 401 });
-  }
+  const error = authorizationError(request);
+  if (error) return error;
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
@@ -130,7 +120,7 @@ export async function DELETE(request: Request) {
     }
     await prisma.environmentVariable.delete({ where: { id } });
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Error al eliminar variable." }, { status: 500 });
   }
 }

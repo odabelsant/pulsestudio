@@ -5,6 +5,7 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { redactSecretsFromText } from "@/lib/secret-redaction";
 
 const SERVER_STORE = path.join(process.cwd(), "data", "mcp-servers.json");
 const CONNECT_TIMEOUT_MS = 10_000;
@@ -177,12 +178,12 @@ export async function withMCPClient<T>(
     return await operation(client);
   } finally {
     if (connected) {
-      await client.close().catch((error: unknown) => {
-        console.error("MCP client close failed", error);
+      await client.close().catch(() => {
+        console.error("MCP client close failed");
       });
     } else {
-      await transport.close().catch((error: unknown) => {
-        console.error("MCP transport cleanup failed", error);
+      await transport.close().catch(() => {
+        console.error("MCP transport cleanup failed");
       });
     }
   }
@@ -207,13 +208,20 @@ export async function callMCPTool(server: MCPServerConfig, name: string, args: R
     TOOL_TIMEOUT_MS,
     `La herramienta "${name}" excedió el tiempo límite de 30 segundos.`,
   ));
-  const content = JSON.stringify(result);
+  const content = redactMCPSecrets(JSON.stringify(result), server);
   return {
     isError: result.isError === true,
     result: content.length > MAX_RESULT_CHARS
       ? `${content.slice(0, MAX_RESULT_CHARS)}\n… resultado truncado`
       : content,
   };
+}
+
+export function redactMCPSecrets(value: string, server: MCPServerConfig): string {
+  return redactSecretsFromText(value, [
+    ...Object.values(server.env ?? {}),
+    ...Object.values(server.headers ?? {}),
+  ]);
 }
 
 function normalizeStoredServer(value: unknown): MCPServerConfig {

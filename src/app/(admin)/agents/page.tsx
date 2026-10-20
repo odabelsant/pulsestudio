@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { apiFetch } from '@/lib/api-fetch'
 
 type Agent = {
   id: string
@@ -34,7 +35,7 @@ export default function AgentsPage() {
   async function refreshAgents() {
     setLoading(true)
     try {
-      const response = await fetch('/api/agents')
+      const response = await apiFetch('/api/agents')
       const data = await response.json()
       setAgents(data)
     } catch (error) {
@@ -55,7 +56,7 @@ export default function AgentsPage() {
     }
 
     try {
-      const response = await fetch('/api/agents', {
+      const response = await apiFetch('/api/agents', {
         method: editingId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -88,7 +89,7 @@ export default function AgentsPage() {
     }
     setLoading(true)
     try {
-      await fetch(`/api/agents?id=${encodeURIComponent(id)}`, {
+      await apiFetch(`/api/agents?id=${encodeURIComponent(id)}`, {
         method: 'DELETE',
       })
       await refreshAgents()

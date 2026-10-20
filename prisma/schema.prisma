@@ -78,6 +78,7 @@ model AgentActionLog {
   syncResult     String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  persistedCases TestCase[]
 
   @@index([createdAt])
   @@index([status, createdAt])
@@ -89,6 +90,8 @@ model Proposal {
   diff          String
   reviews       String   @default("{}")
   humanApproval String?
+  approvedDiffHash String?
+  approvedAt    DateTime?
   checkpoint    String?
   branch        String?
   applied       Boolean  @default(false)
@@ -97,17 +100,42 @@ model Proposal {
 }
 
 model RunnerExecution {
-  id            String   @id @default(uuid())
-  job           String   @default("lint")
-  testPath      String?
-  status        String   @default("pending")
-  output        String?
-  exitCode      Int?
-  durationMs    Int
-  timedOut      Boolean  @default(false)
-  startedAt     DateTime @default(now())
-  completedAt   DateTime?
+  id             String   @id @default(uuid())
+  job            String   @default("lint")
+  testPath       String?
+  status         String   @default("pending")
+  output         String?
+  error          String?
+  command        String?
+  approvalId     String?
+  exitCode       Int?
+  durationMs     Int
+  timedOut       Boolean  @default(false)
+  startedAt      DateTime @default(now())
+  completedAt    DateTime?
   projectProfile String?
+  bugs           Bug[]
+
+  @@index([status, startedAt])
+  @@index([approvalId])
+}
+
+model ActionApproval {
+  id            String   @id @default(uuid())
+  operation     String
+  target        String
+  contentHash   String
+  status        String   @default("APPROVED")
+  approvedAt    DateTime @default(now())
+  expiresAt     DateTime
+  startedAt     DateTime?
+  completedAt   DateTime?
+  resultSummary String?
+  errorSummary  String?
+  createdAt     DateTime @default(now())
+
+  @@index([status, expiresAt])
+  @@index([operation, target])
 }
 
 model EnvironmentVariable {
@@ -118,4 +146,126 @@ model EnvironmentVariable {
   projectId     String?  
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model Requirement {
+  id                 String                @id @default(uuid())
+  key                String?               @unique
+  title              String
+  description        String                @default("")
+  acceptanceCriteria String                @default("[]")
+  status             String                @default("DRAFT")
+  origin             String                @default("LOCAL")
+  externalProvider   String?
+  externalId         String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  testCases          TestCaseRequirement[]
+
+  @@index([status, updatedAt])
+  @@index([origin, externalProvider, externalId])
+}
+
+model TestCase {
+  id                String                @id @default(uuid())
+  title             String
+  description       String                @default("")
+  category          String                @default("manual")
+  gherkin           String                @default("")
+  steps             String                @default("[]")
+  status            String                @default("DRAFT")
+  contextReferences String                @default("[]")
+  contextNotebookId String?
+  contentHash       String
+  sourceActionLogId String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  sourceAction      AgentActionLog?        @relation(fields: [sourceActionLogId], references: [id], onDelete: SetNull)
+  requirements      TestCaseRequirement[]
+  suites            TestSuiteCase[]
+  bugs              Bug[]
+
+  @@index([status, updatedAt])
+  @@index([sourceActionLogId])
+}
+
+model TestCaseRequirement {
+  requirementId String
+  testCaseId    String
+  createdAt     DateTime  @default(now())
+  requirement   Requirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  testCase      TestCase    @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+
+  @@id([requirementId, testCaseId])
+  @@index([testCaseId])
+}
+
+model TestPlan {
+  id          String          @id @default(uuid())
+  name        String
+  description String          @default("")
+  status      String          @default("DRAFT")
+  startsAt    DateTime?
+  endsAt      DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  suites      TestPlanSuite[]
+
+  @@index([status, updatedAt])
+}
+
+model TestSuite {
+  id          String          @id @default(uuid())
+  name        String
+  description String          @default("")
+  status      String          @default("DRAFT")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  plans       TestPlanSuite[]
+  testCases   TestSuiteCase[]
+
+  @@index([status, updatedAt])
+}
+
+model TestPlanSuite {
+  testPlanId String
+  testSuiteId String
+  position   Int       @default(0)
+  testPlan   TestPlan  @relation(fields: [testPlanId], references: [id], onDelete: Cascade)
+  testSuite  TestSuite @relation(fields: [testSuiteId], references: [id], onDelete: Cascade)
+
+  @@id([testPlanId, testSuiteId])
+  @@index([testSuiteId])
+}
+
+model TestSuiteCase {
+  testSuiteId String
+  testCaseId  String
+  position    Int       @default(0)
+  testSuite   TestSuite @relation(fields: [testSuiteId], references: [id], onDelete: Cascade)
+  testCase    TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+
+  @@id([testSuiteId, testCaseId])
+  @@index([testCaseId])
+}
+
+model Bug {
+  id               String          @id @default(uuid())
+  title            String
+  description      String          @default("")
+  severity         String          @default("MEDIUM")
+  status           String          @default("OPEN")
+  stepsToReproduce String          @default("[]")
+  expected         String          @default("")
+  observed         String          @default("")
+  testCaseId       String?
+  runnerExecutionId String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  testCase         TestCase?       @relation(fields: [testCaseId], references: [id], onDelete: SetNull)
+  runnerExecution  RunnerExecution? @relation(fields: [runnerExecutionId], references: [id], onDelete: SetNull)
+
+  @@index([status, severity, updatedAt])
+  @@index([testCaseId])
+  @@index([runnerExecutionId])
 }

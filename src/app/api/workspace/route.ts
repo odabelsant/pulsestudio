@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import { localApiAuthorizationError } from "@/lib/local-api-auth";
 import { listWorkspaceFiles, readWorkspaceFile, writeWorkspaceFile } from "@/lib/workspace-files";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const authorizationError = localApiAuthorizationError(request);
+  if (authorizationError) return authorizationError;
   try {
     const { searchParams } = new URL(request.url);
     const filePath = searchParams.get("path");
@@ -18,6 +21,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const authorizationError = localApiAuthorizationError(request);
+  if (authorizationError) return authorizationError;
   const contentLength = Number(request.headers.get("content-length") ?? 0);
   if (contentLength > 1_100_000) {
     return NextResponse.json({ error: "El contenido supera el límite de 1 MB para edición." }, { status: 413 });

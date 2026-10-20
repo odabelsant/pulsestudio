@@ -14,6 +14,7 @@ export type WorkspaceModuleId =
   | "alm"
   | "action_agent"
   | "historial"
+  | "productividad"
   | "requirements"
   | "test_cases"
   | "test_plans"
@@ -101,30 +102,35 @@ export const workspaceModules: Record<
     description: "Consulta conversaciones y ejecuciones anteriores.",
     href: "/?section=history",
   },
+  productividad: {
+    title: "Productividad QA",
+    description: "Requirements, casos, planes, suites y bugs en una sola vista con agente en tiempo real.",
+    href: "/productividad",
+  },
   requirements: {
     title: "Requirements",
     description: "Centraliza requisitos, criterios de aceptación y trazabilidad.",
-    href: "/requirements",
+    href: "/productividad?entity=requirements",
   },
   test_cases: {
     title: "Test Cases",
     description: "Organiza casos de prueba y sus vínculos con requisitos.",
-    href: "/test-cases",
+    href: "/productividad?entity=test-cases",
   },
   test_plans: {
     title: "Test Plans",
     description: "Planifica releases, cobertura y ciclos de validación.",
-    href: "/test-plans",
+    href: "/productividad?entity=test-plans",
   },
   test_suites: {
     title: "Test Suites",
     description: "Agrupa casos de prueba para preparar futuras ejecuciones.",
-    href: "/test-suites",
+    href: "/productividad?entity=test-suites",
   },
   bugs: {
     title: "Bugs",
     description: "Registra y da seguimiento a defectos del proyecto.",
-    href: "/bugs",
+    href: "/productividad?entity=bugs",
   },
   configuracion: {
     title: "Configuración",
@@ -172,3 +178,24 @@ export const existingSectionByModule: Partial<
 export function getModuleHref(moduleId: WorkspaceModuleId) {
   return workspaceModules[moduleId].href;
 }
+
+/** Path segment for `[slug]` routes (ignores query string on unified QA hrefs). */
+export function getModulePathSlug(moduleId: WorkspaceModuleId): string {
+  return workspaceModules[moduleId].href.split("?")[0].slice(1);
+}
+
+/** Legacy top-level paths that redirect into Productividad (`/productividad?entity=…`). */
+export const qaLegacyPathSlugByModule: Partial<Record<WorkspaceModuleId, string>> = {
+  requirements: "requirements",
+  test_cases: "test-cases",
+  test_plans: "test-plans",
+  test_suites: "test-suites",
+  bugs: "bugs",
+};
+
+/** Alternate slugs that still redirect into Productividad (older module paths). */
+export const qaLegacyPathSlugAliases: Record<string, WorkspaceModuleId> = {
+  test_cases: "test_cases",
+  test_plans: "test_plans",
+  test_suites: "test_suites",
+};

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import mammoth from "mammoth";
 import pdfParse from "pdf-parse";
+import { localApiAuthorizationError } from "@/lib/local-api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,6 +68,8 @@ function isSupportedFile(file: File) {
 }
 
 export async function POST(request: Request) {
+  const authorizationError = localApiAuthorizationError(request);
+  if (authorizationError) return authorizationError;
   try {
     const form = await request.formData();
     const files = form.getAll("files").filter((entry): entry is File => entry instanceof File);
@@ -108,8 +111,8 @@ export async function POST(request: Request) {
       let content: string;
       try {
         content = await extractText(file);
-      } catch (error) {
-        console.error(`Context extraction failed for ${file.name}`, error);
+      } catch {
+        console.error("Context extraction failed");
         return NextResponse.json({ error: `No se pudo extraer texto de ${file.name}. Comprueba que el archivo no esté dañado.` }, { status: 400 });
       }
       if (!content.trim()) continue;
@@ -125,8 +128,8 @@ export async function POST(request: Request) {
     if (!documents.length) return NextResponse.json({ error: "No se encontraron archivos de texto con contenido." }, { status: 400 });
     const created = await prisma.$transaction(documents.map((data) => prisma.contextDocument.create({ data })));
     return NextResponse.json({ documents: created }, { status: 201 });
-  } catch (error) {
-    console.error("Context import failed", error);
+  } catch {
+    console.error("Context import failed");
     return NextResponse.json({ error: "No se pudieron importar los archivos. Comprueba que la base local esté inicializada." }, { status: 500 });
   }
 }

@@ -5,6 +5,8 @@ export interface HistoryCleanupResult {
   chatSessions: number;
   chatMessages: number;
   agentActionLogs: number;
+  runnerExecutions: number;
+  actionApprovals: number;
 }
 
 let cleanupInFlight: Promise<HistoryCleanupResult> | null = null;
@@ -26,11 +28,19 @@ export async function cleanupExpiredHistory(): Promise<HistoryCleanupResult> {
     const actionLogs = await transaction.agentActionLog.deleteMany({
       where: { createdAt: { lt: cutoffDate } },
     });
+    const runnerExecutions = await transaction.runnerExecution.deleteMany({
+      where: { startedAt: { lt: cutoffDate } },
+    });
+    const actionApprovals = await transaction.actionApproval.deleteMany({
+      where: { createdAt: { lt: cutoffDate } },
+    });
     return {
       cutoffDate,
       chatSessions: sessions.count,
       chatMessages: messages.count,
       agentActionLogs: actionLogs.count,
+      runnerExecutions: runnerExecutions.count,
+      actionApprovals: actionApprovals.count,
     };
   }).then((result) => {
     lastCleanup = result;

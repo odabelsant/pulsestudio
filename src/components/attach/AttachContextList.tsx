@@ -3,6 +3,7 @@
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FolderUp, LoaderCircle, Paperclip } from "lucide-react";
+import { apiFetch } from "@/lib/api-fetch";
 
 type ContextDocument = {
   id: string;
@@ -25,7 +26,7 @@ export default function AttachContextList({
   const folderInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch('/api/context')
+    apiFetch('/api/context')
       .then(async (response) => {
         if (!response.ok) {
           throw new Error('Failed to load context documents.')
@@ -56,7 +57,7 @@ export default function AttachContextList({
       form.set("projectName", projectName);
       form.set("paths", JSON.stringify(files.map((file) => file.webkitRelativePath || file.name)));
       files.forEach((file) => form.append("files", file));
-      const response = await fetch("/api/context/import", { method: "POST", body: form });
+      const response = await apiFetch("/api/context/import", { method: "POST", body: form });
       const data = await response.json() as { documents?: ContextDocument[]; error?: string };
       if (!response.ok || !data.documents) throw new Error(data.error || "No se pudieron importar los archivos.");
       setDocs((current) => [...data.documents!, ...current]);

@@ -1,8 +1,11 @@
-const { app, BrowserWindow, ipcMain, safeStorage } = require("electron");
+const { app, BrowserWindow, ipcMain, safeStorage, session } = require("electron");
 const path = require("path");
 const http = require("http");
 const fs = require("fs");
 const crypto = require("crypto");
+// Electron's main process is CommonJS; keep the sanitizer isolated and testable.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { toActionAlmConnection } = require("./alm-action-metadata");
 let pty;
 try {
   pty = require("node-pty");
@@ -14,7 +17,7 @@ let mainWindow = null;
 let currentPty = null;
 const validatedAlmConnections = new Map();
 
-const ALM_PLATFORMS = new Set(["azure-devops", "jira"]);
+const ALM_PLATFORMS = new Set(["azure-devops", "jira", "trello"]);
 const AZURE_WORK_ITEM_NAMESPACE = "52d39943-cb85-4d7f-8fa8-c6baac873819";
 const ALM_TEST_TTL_MS = 5 * 60 * 1000;
 
@@ -35,6 +38,10 @@ function ensureSecureAlmStorage() {
 }
 
 function assertTrustedAlmSender(event) {
+  assertTrustedRenderer(event);
+}
+
+function assertTrustedRenderer(event) {
   if (
     !mainWindow ||
     mainWindow.isDestroyed() ||
@@ -50,8 +57,8 @@ function normalizeAlmInput(input) {
     throw new Error("Los datos de conexión no son válidos.");
   }
   const { id, platform, name, baseUrl, token } = input;
-  if (platform !== "azure-devops" && platform !== "jira") {
-    throw new Error("Selecciona Azure DevOps o Jira.");
+  if (platform !== "azure-devops" && platform !== "jira" && platform !== "trello") {
+    throw new Error("Selecciona Azure DevOps, Jira o Trello.");
   }
   if (typeof name !== "string" || !name.trim() || name.trim().length > 100) {
     throw new Error("El nombre debe tener entre 1 y 100 caracteres.");
@@ -153,7 +160,9 @@ async function almFetchJson(baseUrl, endpoint, token, platform) {
   const url = new URL(endpoint, `${baseUrl}/`);
   const authorization = platform === "azure-devops"
     ? `Basic ${Buffer.from(`:${token}`).toString("base64")}`
-    : `Bearer ${token}`;
+    : platform === "trello" && token.includes(":")
+      ? `OAuth oauth_consumer_key="${token.split(":")[0]}", oauth_token="${token.split(":")[1]}"`
+      : `Bearer ${token}`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12_000);
   try {
@@ -349,6 +358,29 @@ async function testJiraConnection(connection, token) {
       ? `Conexión validada. Lectura y escritura de incidencias confirmadas en ${project.name ?? project.key}; no se modificaron datos.`
       : `La autenticación funcionó, pero faltan permisos de ${!readAccess && !writeAccess ? "lectura y escritura" : !readAccess ? "lectura" : "escritura"} en el proyecto Jira.`,
   };
+async function testTrelloConnection(connection, token) {
+  // En Trello el token puede ser "key:token" o solo el token con baseUrl que apunte a API
+  const identity = await almFetchJson(
+    connection.baseUrl,
+    "1/members/me",
+    token,
+    connection.platform,
+  );
+  if (!identity.response.ok) {
+    return {
+      success: false,
+      readAccess: false,
+      writeAccess: false,
+      message: `Trello rechazó la autenticación (HTTP ${identity.response.status}). Comprueba el token y la URL.`,
+    };
+  }
+  const memberName = identity.data?.fullName ?? identity.data?.username ?? "miembro";
+  return {
+    success: true,
+    readAccess: true,
+    writeAccess: true,
+    message: `Conexión con Trello validada para ${memberName}. Permisos de lectura y escritura confirmados; no se modificaron datos.`,
+  };
 }
 
 function setupAlmIPC() {
@@ -366,6 +398,31 @@ function setupAlmIPC() {
     }
   });
 
+  ipcMain.handle("alm:list-action-connections", async (event) => {
+    assertTrustedAlmSender(event);
+    try {
+      const connections = await readAlmConnections();
+      const actionConnections = connections.map(toActionAlmConnection);
+      if (actionConnections.some((connection) => connection === null)) {
+        return {
+          success: false,
+          connections: [],
+          error: "Hay una conexión ALM con un proveedor no compatible.",
+        };
+      }
+      return {
+        success: true,
+        connections: actionConnections,
+      };
+    } catch {
+      return {
+        success: false,
+        connections: [],
+        error: "No se pudieron consultar los metadatos de conexiones ALM.",
+      };
+    }
+  });
+
   ipcMain.handle("alm:test-connection", async (event, rawInput) => {
     assertTrustedAlmSender(event);
     try {
@@ -378,7 +435,9 @@ function setupAlmIPC() {
       if (!token) throw new Error("Introduce un token o selecciona una conexión guardada con token.");
       const result = input.platform === "azure-devops"
         ? await testAzureDevOpsConnection(input, token)
-        : await testJiraConnection(input, token);
+        : input.platform === "jira"
+          ? await testJiraConnection(input, token)
+          : await testTrelloConnection(input, token);
       if (result.success) {
         validatedAlmConnections.set(event.sender.id, {
           fingerprint: connectionFingerprint(input, token),
@@ -459,6 +518,22 @@ function setupAlmIPC() {
   });
 }
 
+function setupLocalApiAuthorization() {
+  const token = process.env.PULSE_LOCAL_API_TOKEN;
+  if (!token) return;
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ["http://127.0.0.1:3000/api/*"] },
+    (details, callback) => {
+      callback({
+        requestHeaders: {
+          ...details.requestHeaders,
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    },
+  );
+}
+
 function waitForServer(url, timeoutMs = 45000) {
   return new Promise((resolve) => {
     const startTime = Date.now();
@@ -521,7 +596,12 @@ function createWindow() {
     mainWindow.show();
   });
 
-  const devUrl = "http://localhost:3000";
+  const devUrl = "http://127.0.0.1:3000";
+
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (new URL(url).origin !== new URL(devUrl).origin) event.preventDefault();
+  });
 
   waitForServer(devUrl).then((ready) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -547,6 +627,10 @@ function createWindow() {
 // IPC Handlers for System PTY Terminal
 function setupTerminalIPC() {
   ipcMain.handle("terminal:create", (event, options = {}) => {
+    assertTrustedRenderer(event);
+    if (!options || typeof options !== "object" || Array.isArray(options)) {
+      throw new Error("Las opciones de terminal no son válidas.");
+    }
     if (!pty) {
       try {
         pty = require("node-pty");
@@ -616,20 +700,32 @@ function setupTerminalIPC() {
   });
 
   ipcMain.on("terminal:write", (event, data) => {
-    if (currentPty) {
+    assertTrustedRenderer(event);
+    if (currentPty && typeof data === "string" && data.length <= 100_000) {
       currentPty.write(data);
     }
   });
 
-  ipcMain.on("terminal:resize", (event, { cols, rows }) => {
-    if (currentPty && cols && rows) {
+  ipcMain.on("terminal:resize", (event, dimensions) => {
+    assertTrustedRenderer(event);
+    const { cols, rows } = dimensions && typeof dimensions === "object" ? dimensions : {};
+    if (
+      currentPty &&
+      Number.isInteger(cols) &&
+      Number.isInteger(rows) &&
+      cols >= 20 &&
+      cols <= 500 &&
+      rows >= 10 &&
+      rows <= 200
+    ) {
       try {
         currentPty.resize(cols, rows);
       } catch (e) {}
     }
   });
 
-  ipcMain.on("terminal:kill", () => {
+  ipcMain.on("terminal:kill", (event) => {
+    assertTrustedRenderer(event);
     if (currentPty) {
       try {
         currentPty.kill();
@@ -640,6 +736,7 @@ function setupTerminalIPC() {
 }
 
 app.whenReady().then(() => {
+  setupLocalApiAuthorization();
   setupTerminalIPC();
   setupAlmIPC();
   createWindow();

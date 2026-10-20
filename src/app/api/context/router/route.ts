@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { routeRecipe } from "@/lib/recipeRouter";
+import { localApiAuthorizationError } from "@/lib/local-api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const authorizationError = localApiAuthorizationError(request);
+  if (authorizationError) return authorizationError;
   const body: unknown = await request.json().catch(() => null);
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return NextResponse.json({ error: "Se requiere una consulta de contexto válida." }, { status: 400 });
@@ -29,8 +32,8 @@ export async function POST(request: Request) {
       tags: Array.isArray(value.tags) ? value.tags as string[] : undefined,
     });
     return NextResponse.json(routed);
-  } catch (error) {
-    console.error("Context routing failed", error);
+  } catch {
+    console.error("Context routing failed");
     return NextResponse.json(
       { error: "No se pudo buscar en el contexto del proyecto." },
       { status: 500 },

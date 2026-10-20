@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { saveWorkspaceTheme, useWorkspaceTheme } from "@/components/workspace/ThemeProvider";
 import {
   BookOpen,
   Check,
@@ -12,6 +13,8 @@ import {
   Copy,
   Database,
   FileText,
+  FileDown,
+  Layers,
   Layers3,
   Lightbulb,
   Moon,
@@ -24,6 +27,7 @@ import {
 
 type TopicId =
   | "overview"
+  | "productividad"
   | "chat"
   | "action-agent"
   | "terminal"
@@ -47,6 +51,7 @@ type ReadingSize = "small" | "medium" | "large";
 
 const TOPICS: Topic[] = [
   { id: "overview", label: "Visión general", category: "PulseStudio", icon: BookOpen },
+  { id: "productividad", label: "Productividad QA unificada", category: "Módulos", icon: Layers },
   { id: "chat", label: "Chat y Router", category: "Módulos", icon: Network },
   { id: "action-agent", label: "Action Agent y QA", category: "Módulos", icon: ClipboardCheck },
   { id: "terminal", label: "Terminal y Runner", category: "Módulos", icon: Terminal },
@@ -149,7 +154,7 @@ function Article({ topic }: { topic: TopicId }) {
           <div className="grid gap-3 sm:grid-cols-3">
             {[
               ["Contexto primero", "La IA recibe fuentes seleccionadas para la tarea, no una carpeta completa sin filtrar."],
-              ["QA verificable", "Action Agent convierte historias en casos editables antes de sincronizarlos."],
+              ["QA local", "Los cinco módulos QA persisten datos locales; Action Agent puede importar casos tras una aprobación ligada al contenido y al contexto."],
               ["Ejecución segura", "El Runner ofrece trabajos permitidos; la shell nativa está aislada detrás del bridge Electron."],
             ].map(([title, text]) => (
               <div key={title} className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-4">
@@ -162,10 +167,76 @@ function Article({ topic }: { topic: TopicId }) {
           <ol className="mt-3 space-y-3 text-sm leading-6 text-zinc-400">
             <li><span className="mr-2 font-mono text-blue-300">01</span> Reúne políticas, arquitectura y ejemplos en un cuaderno.</li>
             <li><span className="mr-2 font-mono text-blue-300">02</span> Pide una tarea al Chat o al Action Agent; el router recupera fuentes pertinentes.</li>
-            <li><span className="mr-2 font-mono text-blue-300">03</span> Revisa resultados y diffs. Ejecuta sólo los trabajos aprobados o sincroniza los casos revisados.</li>
+            <li><span className="mr-2 font-mono text-blue-300">03</span> Revisa resultados y diffs. Ejecuta sólo trabajos permitidos y aprobados; las escrituras ALM están deshabilitadas en esta fase.</li>
           </ol>
           <Callout title="Principio de calidad">
             Un resultado generado es un borrador, no evidencia de ejecución. Conserva la revisión humana y registra la verificación que realmente se ejecutó.
+          </Callout>
+        </>
+      );
+    case "productividad":
+      return (
+        <>
+          <SectionHeading
+            eyebrow="MÓDULO · QA UNIFICADO"
+            title="Productividad QA y Gobernanza de Agentes"
+            lead="El módulo unificado /productividad centraliza el ciclo de calidad de software reuniendo Requirements, Test Cases, Test Plans, Test Suites y Bugs bajo un selector unificado con agente conversacional en tiempo real, importación de contexto, exportación y sincronización ALM."
+          />
+          <h2 className="text-lg font-semibold text-white">Unificación del espacio de trabajo</h2>
+          <p className="mt-2 text-xs leading-6 text-zinc-400">
+            En lugar de navegar entre múltiples vistas fragmentadas, el selector superior permite alternar instantáneamente entre las 5 entidades fundamentales de QA:
+          </p>
+          <div className="my-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              ["Requirements", "Especificaciones funcionales, reglas de negocio y criterios de aceptación (Gherkin/EARS)."],
+              ["Test Cases", "Casos estructurados con categoría, precondiciones, pasos ordenados y resultados esperados."],
+              ["Test Plans", "Estrategias de release, ventanas de validación y cobertura de hitos."],
+              ["Test Suites", "Agrupaciones modulares de pruebas listas para preparación y ejecución."],
+              ["Bugs", "Defectos locales con severidad, pasos de reproducción, trazabilidad y estado."],
+            ].map(([title, desc]) => (
+              <div key={title} className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-3">
+                <p className="text-xs font-semibold text-blue-200">{title}</p>
+                <p className="mt-1 text-[11px] leading-5 text-zinc-400">{desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <h2 className="mt-7 text-lg font-semibold text-white">Importación de contexto y exportación</h2>
+          <ul className="mt-3 list-inside list-disc space-y-2 text-xs leading-6 text-zinc-400">
+            <li>
+              <strong className="text-zinc-200">Subida de contexto:</strong> Permite adjuntar múltiples archivos (.md, .mdx, .txt, .pdf, .docx) directamente al cuaderno de trabajo de productividad sin abandonar la pantalla.
+            </li>
+            <li>
+              <strong className="text-zinc-200">Exportación a Markdown (.md):</strong> Genera un informe exhaustivo con estructura jerárquica, tablas y etiquetas para auditorías y revisiones en repositorios.
+            </li>
+            <li>
+              <strong className="text-zinc-200">Exportación a Excel / CSV (.csv):</strong> Exporta campos formateados con delimitadores limpios para importar en hojas de cálculo y herramientas analíticas.
+            </li>
+          </ul>
+
+          <h2 className="mt-7 text-lg font-semibold text-white">Gobernanza de permisos del agente</h2>
+          <DataTable
+            headers={["Modo de gobernanza", "Comportamiento", "Nivel de control"]}
+            rows={[
+              [
+                "Manual Permissions",
+                "El agente propone cada paso analítico o de borrador de forma explícita; ninguna persistencia se aplica sin revisión y confirmación manual por el usuario.",
+                "Control total / paso a paso",
+              ],
+              [
+                "Assisted permissions auto",
+                "El agente prepara borradores enriquecidos con contexto normativo y sugiere la acción óptima sobre la entidad seleccionada, solicitando confirmación con un clic.",
+                "Asistencia guiada y ágil",
+              ],
+            ]}
+          />
+
+          <h2 className="mt-7 text-lg font-semibold text-white">Pizarra de resultados en vivo y Dashboard</h2>
+          <p className="mt-2 text-xs leading-6 text-zinc-400">
+            La franja inferior de métricas monitorea en tiempo real los totales persistidos de cada entidad y las operaciones de sesión (pasos aprobados, rechazados, exportaciones y subidas de contexto). Esta telemetría local alimenta de forma transparente las tarjetas del Dashboard global en vivo.
+          </p>
+          <Callout title="Alineación ISTQB y trazabilidad">
+            Toda generación de casos en modo manual o asistido vincula automáticamente las huellas de las fuentes de contexto utilizadas, preservando la trazabilidad de la calidad de software.
           </Callout>
         </>
       );
@@ -185,6 +256,18 @@ function Article({ topic }: { topic: TopicId }) {
             ["contextRouter", "Busca términos en metadata y bloques de documentos.", "Hasta 3 documentos, fragmentos de 900 caracteres."],
             ["/api/ai", "Valida proveedor, arma el system prompt y sirve el stream.", "Historial: 12 turnos; 12.000 caracteres por turno."],
           ]} />
+          <h2 className="mt-7 text-lg font-semibold text-white">Gobernanza y herramientas en el chat</h2>
+          <ul className="mt-3 list-inside list-disc space-y-2 text-xs leading-6 text-zinc-400">
+            <li>
+              <strong className="text-zinc-200">Selectores de permisos:</strong> Alterna entre <em>Manual Permissions</em> (cada paso analítico o de propuesta requiere aprobación del usuario) y <em>Assisted permissions auto</em> (asistencia proactiva con validación ágil).
+            </li>
+            <li>
+              <strong className="text-zinc-200">Menciones de contexto (@):</strong> Permite referenciar documentos específicos del cuaderno activo (<code className="rounded bg-white/[0.06] px-1 py-0.5 text-emerald-200">@documento</code>) para inyectar fragmentos exactos en el prompt.
+            </li>
+            <li>
+              <strong className="text-zinc-200">Botón de anexión (+):</strong> Menú desplegable para acoplar skills especializadas de calidad o invocar agentes del Brain (<code className="rounded bg-white/[0.06] px-1 py-0.5 text-blue-200">@agente</code>) en cualquier turno.
+            </li>
+          </ul>
           <Callout title="Consejo para mejores respuestas">
             Pon el objetivo y las restricciones en la petición, selecciona el cuaderno correcto y menciona sólo las fuentes normativas necesarias. Esto reduce ruido y consumo de tokens.
           </Callout>
@@ -194,19 +277,21 @@ function Article({ topic }: { topic: TopicId }) {
       return (
         <>
           <SectionHeading eyebrow="MÓDULO · QA" title="Action Agent y pizarra QA" lead="Action Agent parte de una referencia o descripción de historia, elige reglas relevantes del cuaderno activo y solicita al modelo casos estructurados en JSON." />
-          <h2 className="text-lg font-semibold text-white">Generar, revisar, sincronizar</h2>
+          <h2 className="text-lg font-semibold text-white">Generar, revisar, conservar</h2>
           <ul className="mt-3 list-inside list-disc space-y-2 text-xs leading-6 text-zinc-400">
             <li>Indica la historia y selecciona categorías como manual, API, positiva o negativa.</li>
-            <li>El router busca fuentes QA/BDD/ISTQB y envía las reglas como contexto al agente.</li>
+            <li>Asocia hasta cuatro documentos Markdown del cuaderno como procedimiento o datos de trabajo; ambos propósitos quedan subordinados a las políticas y no conceden permisos.</li>
             <li>La pizarra valida título, Gherkin, pasos y resultados esperados. La edición inline se guarda primero como borrador local.</li>
-            <li>La sincronización se realiza con el perfil ALM elegido (Azure DevOps o Jira); revisa el destino y la respuesta antes de considerar la tarea terminada.</li>
+            <li>El historial conserva la referencia y la huella SHA-256 de cada fuente asociada. El renderer sólo recibe metadatos ALM; nunca tokens.</li>
+            <li>Los casos se guardan en SQLite sólo tras una autorización local de un solo uso ligada a los casos, al registro de generación y a las huellas SHA-256 de las fuentes.</li>
+            <li>Requirements, Test Cases, Test Plans, Test Suites y Bugs son datos locales; las referencias ALM no implican sincronización.</li>
+            <li>La creación o modificación de elementos en Jira/Azure DevOps está deshabilitada.</li>
           </ul>
           <h2 className="mt-7 text-lg font-semibold text-white">Vectores Roadmap en tiempo real</h2>
           <p className="mt-3 text-sm leading-7 text-zinc-400">
-            El roadmap refleja las etapas observables del flujo actual: recuperación de contexto, generación, validación,
-            registro del borrador y, al sincronizar, aprobación, creación individual de cada caso y actualización del historial.
-            Los nodos completados aparecen en verde y el paso activo en amarillo. Un nodo rojo se puede abrir para inspeccionar
-            el error devuelto por la API o ALM, incluida la información de sincronización parcial cuando aplica.
+            El ciclo local registra propuesta, validación, ejecución, resultado, fallo o cancelación. No existe una transición
+            a aprobación externa ni sincronización en esta fase. Los casos generados siguen siendo borradores que requieren
+            revisión antes de cualquier futura integración de escritura.
           </p>
           <CodeBlock language="formato esperado">{`{
   "testCases": [{
@@ -220,7 +305,7 @@ function Article({ topic }: { topic: TopicId }) {
   }]
 }`}</CodeBlock>
           <Callout title="Tip de QA" tone="warning">
-            Verifica precondiciones, datos de prueba, permisos y resultados observables antes de sincronizar. Un texto Gherkin válido no demuestra que el escenario se haya ejecutado.
+            Verifica precondiciones, datos de prueba y resultados observables antes de considerar un caso completo. Un texto Gherkin válido no demuestra que el escenario se haya ejecutado.
           </Callout>
         </>
       );
@@ -290,15 +375,25 @@ Genera los casos negativos para esta historia y sigue las reglas de @reglas-istq
         <>
           <SectionHeading eyebrow="DESARROLLO · SISTEMA" title="Arquitectura y stack" lead="PulseStudio combina un App Router de Next.js con una shell Electron opcional. El servidor Next gestiona API y persistencia; el renderer no accede directamente a la shell ni a secretos." />
           <DataTable headers={["Capa", "Tecnología", "Rol"]} rows={[
-            ["UI", "React 19 · Tailwind CSS 4", "Interfaz de Chat, cuadernos, QA y Runner."],
+            ["UI", "React 19 · Tailwind CSS 4", "Interfaz de Chat, cuadernos, QA, Runner y paneles."],
+            ["Temas", "ThemeProvider dual (Dark / Light pergamino)", "Modo oscuro y modo claro cálido optimizado contra la fatiga visual."],
             ["Web/API", "Next.js 16 App Router", "Rutas de servidor, streaming de IA y pantallas."],
             ["Desktop", "Electron", "Ventana, PTY y llamadas IPC controladas."],
             ["Persistencia", "Prisma · SQLite · better-sqlite3", "Modelos y base de datos local dev.db."],
             ["IA", "Vercel AI SDK · Google provider · Ollama HTTP", "Generación por streaming con proveedor configurable."],
           ]} />
           <CodeBlock language="flujo">{`Renderer (React)
+  ├─ ThemeProvider ──> [data-theme="dark" | "light"] ──> globals.css (paleta cálida)
   ├─ fetch /api/* ──> Next.js Route Handlers ──> Prisma ──> dev.db
   └─ window.electronAPI ──> preload/contextBridge ──> IPC ──> Electron main`}</CodeBlock>
+          <h2 className="mt-7 text-lg font-semibold text-white">Sistema de temas y diseño descansado</h2>
+          <p className="mt-2 text-xs leading-6 text-zinc-400">
+            El sistema global de temas implementado con <code className="rounded bg-white/[0.06] px-1.5 py-0.5 text-zinc-200">ThemeProvider</code> garantiza persistencia automática y una experiencia visual de alto nivel:
+          </p>
+          <ul className="mt-2 list-inside list-disc space-y-1.5 text-xs leading-6 text-zinc-400">
+            <li><strong className="text-zinc-200">Modo Oscuro:</strong> Fondos carbón profundos (#080D10 / #0A1014) con bordes de precisión cian-gris (#223039) y acentos carmesí (#E85D5D).</li>
+            <li><strong className="text-zinc-200">Modo Claro Cálido:</strong> Estilo libro/pergamino (#F4EFE4 / #FAF6EE) con tipografía suave (#2C2822 / #5C564C) especialmente calibrado para reducir la fatiga ocular en sesiones prolongadas de auditoría y desarrollo de pruebas.</li>
+          </ul>
           <Callout title="Contribución segura">
             Mantén validación en Route Handlers, límites de carga/contexto y checks de confianza en IPC. No pases tokens ALM al renderer ni guardes secretos en localStorage.
           </Callout>
@@ -414,7 +509,7 @@ curl -sS 'http://localhost:3000/api/mcp?tools=<server-id>'
 # Cada llamada requiere aprobación explícita en la UI MCP
 # Evita enviar secretos o invocar esta ruta desde clientes no confiables.`}</CodeBlock>
           <Callout title="Importante">
-            La API no proporciona autenticación por defecto: úsala en un entorno local de confianza, no la publiques directamente en Internet.
+            Las rutas locales exigen una sesión; algunas operaciones administrativas también requieren PULSE_ADMIN_TOKEN. En desarrollo sin token sólo se permiten solicitudes same-origin desde loopback. Antes de exponer la aplicación fuera del entorno local, configura autenticación de usuario para despliegue.
           </Callout>
         </>
       );
@@ -428,6 +523,9 @@ curl -sS 'http://localhost:3000/api/mcp?tools=<server-id>'
             ["ContextDocument", "Fuente textual, tags, formato y proyecto.", "notebookId opcional con borrado en cascada."],
             ["ChatSession / ChatMessage", "Conversaciones y mensajes.", "Mensajes en cascada por sesión."],
             ["AgentActionLog", "Acciones y borradores de casos QA.", "Estado de generación/sincronización."],
+            ["Requirement / TestCase", "Requisitos y casos QA locales; el contenido de caso conserva hash y auditoría de contexto.", "Relación N:M entre requisitos y casos."],
+            ["TestPlan / TestSuite", "Planes y suites locales con estados y fechas.", "Relaciones N:M entre planes/suites y suites/casos."],
+            ["Bug", "Defectos locales y evidencia asociada.", "Vínculos opcionales con TestCase y RunnerExecution."],
             ["Agent", "Nombre, descripción y system prompt.", "Artefactos administrables."],
             ["Proposal / RunnerExecution", "Aprobaciones y resultados de jobs.", "Trazabilidad de revisión y ejecución."],
           ]} />
@@ -454,24 +552,32 @@ export default function DevDocsModal({
   onClose,
   theme,
   onThemeToggle,
+  variant = "modal",
 }: {
   open: boolean;
-  onClose: () => void;
-  theme: Theme;
-  onThemeToggle: () => void;
+  onClose?: () => void;
+  theme?: Theme;
+  onThemeToggle?: () => void;
+  variant?: "modal" | "page";
 }) {
   const [activeTopic, setActiveTopic] = useState<TopicId>("overview");
   const [readingSize, setReadingSize] = useState<ReadingSize>("medium");
+  const [modalTheme, setModalTheme] = useState<Theme>("dark");
+  const workspaceTheme = useWorkspaceTheme();
+  const effectiveTheme = variant === "page"
+    ? workspaceTheme
+    : theme ?? modalTheme;
+  const close = useCallback(() => onClose?.(), [onClose]);
   const topic = TOPICS.find((item) => item.id === activeTopic) ?? TOPICS[0];
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || variant === "page") return;
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") close();
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose, open]);
+  }, [close, open, variant]);
 
   if (!open) return null;
 
@@ -479,17 +585,21 @@ export default function DevDocsModal({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-0 backdrop-blur-sm sm:p-4"
+      className={variant === "page"
+        ? "min-h-[calc(100vh-3.5rem)] bg-[#0d0d0f]"
+        : "fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-0 backdrop-blur-sm sm:p-4"}
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (variant === "modal" && event.target === event.currentTarget) close();
       }}
     >
       <section
-        role="dialog"
-        aria-modal="true"
+        role={variant === "modal" ? "dialog" : undefined}
+        aria-modal={variant === "modal" ? true : undefined}
         aria-labelledby="devdocs-title"
-        data-theme={theme}
-        className="devdocs-modal flex h-full w-full max-w-7xl overflow-hidden border border-white/[0.1] bg-[#0d0d0f] shadow-2xl sm:h-[min(92vh,900px)] sm:rounded-2xl"
+        data-theme={variant === "modal" ? effectiveTheme : undefined}
+        className={variant === "page"
+          ? "devdocs-page mx-auto flex min-h-[calc(100vh-3.5rem)] w-full max-w-[1600px] overflow-hidden border-x border-white/[0.08] bg-[#0d0d0f]"
+          : "devdocs-modal flex h-full w-full max-w-7xl overflow-hidden border border-white/[0.1] bg-[#0d0d0f] shadow-2xl sm:h-[min(92vh,900px)] sm:rounded-2xl"}
       >
         <aside className="flex w-[220px] shrink-0 flex-col border-r border-white/[0.08] bg-[#111113] sm:w-[260px]">
           <div className="border-b border-white/[0.08] p-4">
@@ -542,6 +652,14 @@ export default function DevDocsModal({
               <p className="truncate text-xs font-medium text-zinc-300">{topic.label}</p>
             </div>
             <div className="ml-4 flex shrink-0 items-center gap-2">
+              <a
+                href="/templates/module-audit-template.md"
+                download
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/[0.1] px-2 text-[10px] text-zinc-300 transition hover:bg-white/[0.05] hover:text-white"
+              >
+                <FileDown className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Plantilla de auditoría</span>
+              </a>
               <label className="sr-only" htmlFor="devdocs-reading-size">Tamaño de letra de la documentación</label>
               <select
                 id="devdocs-reading-size"
@@ -554,24 +672,36 @@ export default function DevDocsModal({
                 <option value="medium">Mediano</option>
                 <option value="large">Grande</option>
               </select>
-              <button
-                type="button"
-                onClick={onThemeToggle}
-                className="grid h-8 w-8 place-items-center rounded-lg border border-white/[0.1] text-zinc-300 transition hover:bg-blue-600 hover:text-white"
-                aria-label={`Cambiar a tema ${theme === "dark" ? "claro" : "oscuro"}`}
-                aria-pressed={theme === "light"}
-                title={`Cambiar a tema ${theme === "dark" ? "claro" : "oscuro"}`}
-              >
-                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="grid h-8 w-8 place-items-center rounded-lg text-zinc-400 transition hover:bg-white/[0.08] hover:text-white"
-                aria-label="Cerrar documentación"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              {variant === "modal" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onThemeToggle) {
+                      onThemeToggle();
+                      return;
+                    }
+                    const next = effectiveTheme === "dark" ? "light" : "dark";
+                    setModalTheme(next);
+                    saveWorkspaceTheme(next);
+                  }}
+                  className="grid h-8 w-8 place-items-center rounded-lg border border-white/[0.1] text-zinc-300 transition hover:bg-blue-600 hover:text-white"
+                  aria-label={`Cambiar a tema ${effectiveTheme === "dark" ? "claro" : "oscuro"}`}
+                  aria-pressed={effectiveTheme === "light"}
+                  title={`Cambiar a tema ${effectiveTheme === "dark" ? "claro" : "oscuro"}`}
+                >
+                  {effectiveTheme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                </button>
+              )}
+              {variant === "modal" && (
+                <button
+                  type="button"
+                  onClick={close}
+                  className="grid h-8 w-8 place-items-center rounded-lg text-zinc-400 transition hover:bg-white/[0.08] hover:text-white"
+                  aria-label="Cerrar documentación"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
           </div>
           <article data-reading-size={readingSize} className="devdocs-article mx-auto max-w-4xl px-5 py-8 sm:px-10 sm:py-10">

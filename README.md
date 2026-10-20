@@ -49,7 +49,7 @@ npm run dev
 
 Abre [http://localhost:3000](http://localhost:3000).
 
-La navegación global usa el layout de PulseStudio con sidebar y topbar compartidos. Las áreas activas mantienen su estado y componentes existentes; los módulos aún no implementados se muestran como placeholders en `/dashboard`, `/gui`, `/requirements`, `/test-cases`, `/test-plans`, `/test-suites`, `/bugs`, `/configuracion`, `/devdocs-dashboard` y `/devdocs`. El logo de la interfaz es `public/pulsestudio-logo.png`.
+La navegación global usa el layout de PulseStudio con sidebar y topbar compartidos. Los módulos `Requirements`, `Test Cases`, `Test Plans`, `Test Suites` y `Bugs` usan persistencia CRUD local en `/api/qa/*`. `Dashboard`, `Agente GUI` y `Configuración` consumen datos locales (`/api/dashboard`, terminal gobernada y preferencias). Antes de usar QA en una base existente, ejecuta `npx prisma migrate deploy`. DevDocs se consulta en `/devdocs`; `/devdocs-dashboard` redirige a esa ruta. El logo de la interfaz es `public/pulsestudio-logo.png`.
 
 ### Extensión QAPI para VS Code
 
@@ -67,13 +67,13 @@ npm run build
 
 Para usar el modo gratuito, instala e inicia Ollama, descarga `qwen2.5-coder:3b` y elige **Ollama local (gratis)** en Studio. La URL predeterminada es `http://127.0.0.1:11434`; puedes cambiarla con `OLLAMA_BASE_URL` en `.env`.
 
-El Runner seguro sólo permite `npm run lint`, `npm run build` y `npx playwright test`, sin comandos libres. Copia `.env.example` como `.env` y configura `TARGET_WORKSPACE_PATH` con la ruta absoluta de TecnoCosecha. Si no se configura, el runner opera sobre el propio Orquestador para pruebas iniciales.
+El Runner gobernado sólo permite `lint`, `build`, `playwright`, `typecheck` y `prisma generate`; no recibe comandos libres. Cada ejecución requiere confirmación explícita, una autorización temporal de un solo uso vinculada al trabajo y al workspace, y registra su resultado. Los fallos y resultados desconocidos no se presentan como éxitos. `lint` y `build` ejecutan scripts que llaman a `context:update`; considera ese efecto antes de autorizarlos. La terminal interactiva de Electron es una función de shell separada y no forma parte de la allowlist del Runner. Copia `.env.example` como `.env` y configura `TARGET_WORKSPACE_PATH` con la ruta absoluta de TecnoCosecha. Si no se configura, el runner opera sobre el propio Orquestador para pruebas iniciales.
 
 ### Conexiones ALM
 
 La sección **Conexiones ALM** permite configurar Azure DevOps y Jira desde la aplicación Electron. La prueba de conexión verifica acceso de lectura y escritura sobre proyectos o Work Items sin crear ni modificar datos. Para Azure DevOps, el PAT debe permitir consultar proyectos y permisos de Work Items; para Jira, el Bearer Token debe poder consultar la identidad, proyectos y permisos de incidencias.
 
-Los tokens se cifran con Electron `safeStorage` en el directorio de datos de la aplicación y sólo se descifran en el proceso principal. No se guardan en `localStorage` ni en SQLite. En Linux se requiere GNOME Keyring o KWallet; el almacenamiento `basic_text` se rechaza. La configuración ALM no está disponible desde el navegador web.
+Los tokens se cifran con Electron `safeStorage` en el directorio de datos de la aplicación y sólo se descifran en el proceso principal. No se guardan en `localStorage` ni en SQLite. En Linux se requiere GNOME Keyring o KWallet; el almacenamiento `basic_text` se rechaza. La configuración ALM no está disponible desde el navegador web. La comprobación de permisos no crea ni modifica datos; las escrituras ALM permanecen deshabilitadas. Las herramientas MCP pueden producir efectos externos: mientras las escrituras de proveedores sigan fuera de alcance, invoca sólo herramientas que hayas verificado como de lectura.
 
 ### Cerebro de Contexto y Action Agent
 
@@ -81,6 +81,12 @@ La sección **Cerebro de Contexto** organiza las fuentes en cuadernos con títul
 
 El servicio `src/lib/recipeRouter.ts` elige recetas de QA/ISTQB, Azure DevOps, TypeScript y contexto general, y limita los fragmentos enviados al modelo. Chat y Action Agent usan el cuaderno activo; escribe `@` para seleccionar fuentes concretas. En la Terminal, `/ask <tarea> @fuente` envía una consulta al agente con las fuentes seleccionadas, sin ejecutar ese texto como un comando de shell.
 
-El endpoint `POST /api/context/router` devuelve fragmentos y las recetas seleccionadas. Las ediciones de casos de Action Agent quedan en la pizarra hasta que se aprueban.
+El endpoint `POST /api/context/router` devuelve fragmentos y las recetas seleccionadas. Los casos de Action Agent se conservan como borradores locales en la pizarra y el historial. La aprobación y la ejecución de cambios siguen deshabilitadas.
 
-La sincronización de Action Agent necesita que el bridge Electron disponible exponga `window.electronAPI.almGetProfiles()` con perfiles que incluyan plataforma, URL, token y proyecto para crear los elementos en Azure DevOps o Jira. Los tokens sólo se mantienen en memoria durante la sincronización.
+Action Agent permite asociar hasta cuatro archivos `.md`/`.mdx` del cuaderno activo como **procedimiento** o **datos de trabajo**. El servidor valida que sigan en ese cuaderno y registra referencias con huellas SHA-256 junto con los borradores y sus resultados locales. El contenido Markdown es contexto no confiable: nunca concede permisos ni autorización.
+
+La propuesta local y la generación de casos se distinguen de una operación externa. Los cinco módulos QA guardan datos locales y sus relaciones en SQLite; los requisitos pueden contener referencias externas, pero no se sincronizan. Action Agent conserva sus borradores y sólo importa casos a Test Cases tras una autorización local de un solo uso ligada al contenido, a su origen y a las huellas SHA-256 del Contexto de Acción. El historial no acepta del cliente transiciones `APPROVED`/`SYNCED`; la importación QA autorizada actualiza el borrador de origen dentro de su transacción. Las escrituras en Jira y Azure DevOps siguen deshabilitadas.
+
+Las rutas API locales requieren una sesión; las operaciones administrativas (por ejemplo, variables secretas y propuestas) también requieren `PULSE_ADMIN_TOKEN`. En desarrollo sin token sólo se aceptan solicitudes same-origin de loopback; fuera de desarrollo no existe esa excepción. `npm run desktop:dev` genera un token efímero compartido entre Next.js y Electron. El proceso principal de Electron añade ese token a las solicitudes locales; preload no lo expone al renderer. `PULSE_ADMIN_TOKEN` tampoco se entrega al renderer. Las aprobaciones MCP y del Runner se vinculan en servidor al hash del contenido, destino y operación, y se consumen una sola vez. Las propuestas de cambios persisten hashes de revisión/aprobación, pero aplicar diffs, revertirlos y publicar no está implementado y se rechaza explícitamente.
+
+Las migraciones `20261019193000_action_authorizations_and_runner_audit` y `20261019194500_qa_domain` añaden aprobaciones/auditoría del Runner y las entidades QA. Son aditivas. Antes de usar las tablas nuevas en una base existente, respáldala y aplica las migraciones con `npx prisma migrate deploy`; no se aplicaron al `dev.db` local de este worktree. El script `dev` no ejecuta `context:update`; Next.js aún puede actualizar su bloque administrado en `AGENTS.md` al iniciar. `build`, `lint` y `db:push` sí ejecutan `context:update`. Los despliegues web no locales requieren diseñar y configurar autenticación de usuario antes de habilitar estas APIs.

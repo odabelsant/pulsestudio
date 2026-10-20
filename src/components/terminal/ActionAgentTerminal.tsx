@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { ContextMentionInput, type MentionSource } from "@/components/chat/ChatInterface";
+import { apiFetch } from "@/lib/api-fetch";
 
 type ActionJob = "lint" | "build" | "typecheck" | "prisma" | "playwright";
 type LogType = "input" | "stdout" | "stderr" | "system" | "agent";
@@ -51,12 +52,15 @@ interface ShellInfo {
 }
 
 interface RunnerResult {
+  executionId: string;
+  approvalId: string;
   job: ActionJob;
   command: string;
   output: string;
   exitCode: number | null;
   durationMs: number;
   timedOut: boolean;
+  status: "COMPLETED" | "FAILED" | "UNKNOWN";
 }
 
 interface SavedPreferences {
@@ -116,7 +120,10 @@ function isRunnerResult(value: unknown): value is RunnerResult {
     typeof value.output === "string" &&
     (typeof value.exitCode === "number" || value.exitCode === null) &&
     typeof value.durationMs === "number" &&
-    typeof value.timedOut === "boolean"
+    typeof value.timedOut === "boolean" &&
+    typeof value.executionId === "string" &&
+    typeof value.approvalId === "string" &&
+    ["COMPLETED", "FAILED", "UNKNOWN"].includes(String(value.status))
   );
 }
 
@@ -238,7 +245,7 @@ export default function ActionAgentTerminal({
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/runner", { signal: controller.signal })
+    apiFetch("/api/runner", { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("No se pudo consultar el workspace.");
         const result: unknown = await response.json();
@@ -265,7 +272,7 @@ export default function ActionAgentTerminal({
   useEffect(() => {
     if (!notebookId) return;
     const controller = new AbortController();
-    fetch(`/api/context?notebookId=${encodeURIComponent(notebookId)}`, {
+    apiFetch(`/api/context?notebookId=${encodeURIComponent(notebookId)}`, {
       signal: controller.signal,
       cache: "no-store",
     })
@@ -366,44 +373,44 @@ export default function ActionAgentTerminal({
   }, [activeTab, activeTabInfo?.cwd, appendLog, isElectronActive]);
 
   const runJob = useCallback(async (job: ActionJob, testPath = "") => {
-    const api = typeof window !== "undefined" ? window.electronAPI : undefined;
-    if (isElectronActive && api) {
-      if (!terminalReady) {
-        appendLog("stderr", "La terminal nativa todavía no está lista.");
-        return;
-      }
-
-      const validPath = job === "playwright" ? validateTestPath(testPath) : "";
-      if (validPath === null) {
-        appendLog("stderr", "La ruta debe ser un archivo Playwright relativo *.spec.* o *.test.*.");
-        return;
-      }
-
-      const action = QUICK_ACTIONS.find((item) => item.id === job);
-      if (!action) return;
-      const command = validPath ? `${action.command} ${validPath}` : action.command;
-      appendLog("input", command);
-      api.writeTerminal(`${command}\r`);
-      return;
-    }
-
     const validPath = job === "playwright" ? validateTestPath(testPath) : "";
     if (validPath === null) {
       appendLog("stderr", "La ruta debe ser un archivo Playwright relativo *.spec.* o *.test.*.");
       return;
     }
 
+    const action = QUICK_ACTIONS.find((item) => item.id === job);
+    if (!window.confirm(
+      `Revisa y aprueba esta ejecución:\n\nTrabajo: ${action?.label ?? job}\nWorkspace: ${shellInfo?.cwd ?? workspace}${validPath ? `\nTest: ${validPath}` : ""}`,
+    )) return;
+
     setIsRunning(true);
     setCurrentJob(job);
-    const action = QUICK_ACTIONS.find((item) => item.id === job);
     appendLog("system", `Ejecutando acción aprobada: ${action?.label ?? job}…`);
 
     try {
-      const response = await fetch("/api/runner", {
+      const approvalResponse = await apiFetch("/api/runner", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action: "authorize",
           job,
+          ...(job === "playwright" && validPath ? { testPath: validPath } : {}),
+        }),
+      });
+      const approvalBody: unknown = await approvalResponse.json();
+      if (!approvalResponse.ok || !isRecord(approvalBody) || typeof approvalBody.approvalId !== "string") {
+        throw new Error(isRecord(approvalBody) && typeof approvalBody.error === "string"
+          ? approvalBody.error
+          : "No se pudo registrar la aprobación.");
+      }
+      const response = await apiFetch("/api/runner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "execute",
+          job,
+          approvalId: approvalBody.approvalId,
           ...(job === "playwright" && validPath ? { testPath: validPath } : {}),
         }),
       });
@@ -421,8 +428,8 @@ export default function ActionAgentTerminal({
       appendLog("system", `${result.command} · ${(result.durationMs / 1000).toFixed(1)} s`);
       appendLog("stdout", result.output);
       appendLog(
-        result.exitCode === 0 && !result.timedOut ? "agent" : "stderr",
-        result.exitCode === 0 && !result.timedOut
+        result.status === "COMPLETED" && result.exitCode === 0 && !result.timedOut ? "agent" : "stderr",
+        result.status === "COMPLETED" && result.exitCode === 0 && !result.timedOut
           ? `${job} terminó correctamente.`
           : `${job} terminó con código ${result.exitCode ?? "desconocido"}${result.timedOut ? " (tiempo agotado)" : ""}.`,
       );
@@ -435,13 +442,13 @@ export default function ActionAgentTerminal({
       setIsRunning(false);
       setCurrentJob(null);
     }
-  }, [appendLog, isElectronActive, terminalReady]);
+  }, [appendLog, shellInfo?.cwd, workspace]);
 
   const showContext = useCallback(async () => {
     appendLog("system", `Workspace: ${shellInfo?.cwd ?? workspace}`);
     appendLog("agent", `Pestaña: ${activeTabInfo?.name ?? activeTab} · Agente: ${activeAgent}`);
     try {
-      const response = await fetch("/api/context");
+      const response = await apiFetch("/api/context");
       const result: unknown = await response.json();
       if (!response.ok) {
         const message = isRecord(result) && typeof result.error === "string"
@@ -484,7 +491,7 @@ export default function ActionAgentTerminal({
     setIsRunning(true);
     appendLog("agent", `${activeAgent} · ${prompt}`);
     try {
-      const response = await fetch("/api/ai", {
+      const response = await apiFetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

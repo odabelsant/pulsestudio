@@ -4,7 +4,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createProposal } from "@/lib/change-control";
 import { activeProjectProfile } from "@/lib/project-profiles";
-import { runApprovedJob, type RunResult } from "@/lib/runner";
+import { authorizeRunnerJob, runApprovedJob, type RunResult } from "@/lib/runner";
 
 const MAX_PROPOSALS = 6;
 const dataDirectory = path.join(process.cwd(), "data");
@@ -25,7 +25,14 @@ export async function lastMaintenanceReport() {
 export async function runNightMaintenance() {
   if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) throw new Error("Configura GOOGLE_GENERATIVE_AI_API_KEY para el mantenimiento nocturno con Gemini.");
   const profile = activeProjectProfile();
-  const [lint, build] = await Promise.all([runApprovedJob("lint"), runApprovedJob("build")]);
+  const [lintApproval, buildApproval] = await Promise.all([
+    authorizeRunnerJob("lint"),
+    authorizeRunnerJob("build"),
+  ]);
+  const [lint, build] = await Promise.all([
+    runApprovedJob("lint", undefined, lintApproval.id),
+    runApprovedJob("build", undefined, buildApproval.id),
+  ]);
   const report: { at: string; profile: string; baseline: RunResult[]; proposals: { id?: string; title: string; rationale: string; verification: string; status: string }[] } = { at: new Date().toISOString(), profile: profile.name, baseline: [lint, build], proposals: [] };
   if (lint.exitCode !== 0 || build.exitCode !== 0 || lint.timedOut || build.timedOut) {
     await saveReport(report);
@@ -45,7 +52,7 @@ export async function runNightMaintenance() {
   for (const task of tasks.slice(0, MAX_PROPOSALS)) {
     if (task.risk !== "low" || !task.title || !task.rationale) continue;
     try {
-      const item = task.diff ? createProposal(task.title, task.diff) : undefined;
+      const item = task.diff ? await createProposal(task.title, task.diff) : undefined;
       report.proposals.push({ id: item?.id, title: task.title, rationale: task.rationale, verification: task.verification ?? "Revisión humana requerida.", status: item ? "pendiente de revisión" : "análisis sin diff" });
     } catch { report.proposals.push({ title: task.title, rationale: task.rationale, verification: task.verification ?? "Revisión humana requerida.", status: "diff rechazado por las reglas de seguridad" }); }
   }

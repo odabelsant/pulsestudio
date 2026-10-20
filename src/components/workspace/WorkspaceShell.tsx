@@ -3,16 +3,14 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
 import {
   Bot,
   BookOpen,
-  Bug,
-  CalendarDays,
   CheckSquare,
   ChevronRight,
   Code2,
-  FileCheck2,
-  FolderKanban,
+  Layers,
   GitBranch,
   History,
   KeyRound,
@@ -30,6 +28,7 @@ import {
   Terminal,
   X,
 } from "lucide-react";
+import ThemeToggleButton from "@/components/workspace/ThemeToggleButton";
 import {
   getModuleHref,
   type WorkspaceModuleId,
@@ -57,14 +56,11 @@ const primaryItems: NavigationItem[] = [
   { id: "alm", icon: GitBranch },
   { id: "action_agent", icon: CheckSquare, badge: "QA" },
   { id: "historial", icon: History },
+  { id: "devdocs", icon: BookOpen },
 ];
 
 const workItems: NavigationItem[] = [
-  { id: "requirements", icon: FileCheck2 },
-  { id: "test_cases", icon: CheckSquare },
-  { id: "test_plans", icon: CalendarDays },
-  { id: "test_suites", icon: FolderKanban },
-  { id: "bugs", icon: Bug },
+  { id: "productividad", icon: Layers, badge: "unificado" },
 ];
 
 const configItems: NavigationItem[] = [
@@ -113,64 +109,96 @@ export default function WorkspaceShell({
     router.push(getModuleHref(moduleId));
   }
 
-  function renderItems(items: NavigationItem[]) {
-    return items.map(({ id, icon: Icon, badge }) => (
-      <button
-        key={id}
-        type="button"
-        onClick={() => selectModule(id)}
-        title={sidebarCollapsed ? workspaceModules[id].title : undefined}
-        aria-current={activeModule === id ? "page" : undefined}
-        className={`group flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors ${
-          activeModule === id
-            ? "bg-[#141F25] font-semibold text-[#E85D5D]"
-            : "text-[#A6B5BE] hover:bg-[#141F25] hover:text-[#E8F0F3]"
-        }`}
-      >
-        <span className="flex min-w-0 items-center gap-2.5">
-          <Icon
-            className={`h-4 w-4 shrink-0 ${
-              activeModule === id
-                ? "text-[#E85D5D]"
-                : "text-[#758792] group-hover:text-[#E8F0F3]"
-            }`}
-          />
-          {!sidebarCollapsed && (
-            <span className="truncate">{workspaceModules[id].title}</span>
-          )}
+  function SidebarNavTooltip({
+    label,
+    children,
+    side = "right",
+  }: {
+    label: string;
+    children: ReactNode;
+    side?: "right" | "top";
+  }) {
+    if (!sidebarCollapsed) return children;
+    const positionClass =
+      side === "top"
+        ? "bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2"
+        : "left-[calc(100%+10px)] top-1/2 -translate-y-1/2";
+    return (
+      <span className="group/navtip relative flex w-full min-w-0 justify-center">
+        {children}
+        <span
+          role="tooltip"
+          aria-hidden="true"
+          className={`pointer-events-none absolute ${positionClass} z-[70] select-none whitespace-nowrap rounded-md border border-[#30434D] bg-[#141F25] px-2.5 py-1 text-[11px] font-medium text-[#E8F0F3] opacity-0 shadow-xl transition-all duration-150 ease-out group-hover/navtip:translate-x-0 group-hover/navtip:opacity-100 group-focus-within/navtip:opacity-100`}
+        >
+          {label}
         </span>
-        {!sidebarCollapsed && badge && (
-          <span className="rounded border border-[#223039] bg-[#10181D] px-1.5 py-0.5 font-mono text-[9px] uppercase text-[#A6B5BE]">
-            {badge}
-          </span>
-        )}
-      </button>
-    ));
+      </span>
+    );
+  }
+
+  function renderItems(items: NavigationItem[]) {
+    return items.map(({ id, icon: Icon, badge }) => {
+      const label = workspaceModules[id].title;
+      return (
+        <SidebarNavTooltip key={id} label={label}>
+          <button
+            type="button"
+            onClick={() => selectModule(id)}
+            aria-current={activeModule === id ? "page" : undefined}
+            aria-label={sidebarCollapsed ? label : undefined}
+            className={`group flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+              activeModule === id
+                ? "bg-[#141F25] font-semibold text-[#E85D5D]"
+                : "text-[#A6B5BE] hover:bg-[#141F25] hover:text-[#E8F0F3]"
+            }`}
+          >
+            <span className="flex min-w-0 items-center gap-2.5">
+              <Icon
+                className={`h-4 w-4 shrink-0 ${
+                  activeModule === id
+                    ? "text-[#E85D5D]"
+                    : "text-[#758792] group-hover:text-[#E8F0F3]"
+                }`}
+              />
+              {!sidebarCollapsed && <span className="truncate">{label}</span>}
+            </span>
+            {!sidebarCollapsed && badge && (
+              <span className="rounded border border-[#223039] bg-[#10181D] px-1.5 py-0.5 font-mono text-[9px] uppercase text-[#A6B5BE]">
+                {badge}
+              </span>
+            )}
+          </button>
+        </SidebarNavTooltip>
+      );
+    });
   }
 
   const sidebarContent = (
     <>
       <div className="flex h-14 items-center justify-between border-b border-[#223039] px-4">
-        <button
-          type="button"
-          onClick={() => selectModule("devdocs_dashboard")}
-          className="flex min-w-0 items-center gap-2.5 text-left"
-          aria-label="Abrir DevDocs de PulseStudio"
-        >
-          <Image
-            src="/pulsestudio-logo.png"
-            alt=""
-            width={32}
-            height={32}
-            priority
-            className="h-8 w-8 rounded-lg object-contain"
-          />
-          {!sidebarCollapsed && (
-            <span className="truncate text-sm font-semibold tracking-tight text-[#E8F0F3]">
-              PulseStudio
-            </span>
-          )}
-        </button>
+        <SidebarNavTooltip label="PulseStudio · DevDocs">
+          <button
+            type="button"
+            onClick={() => selectModule("devdocs")}
+            className="flex min-w-0 items-center gap-2.5 text-left"
+            aria-label="Abrir DevDocs de PulseStudio"
+          >
+            <Image
+              src="/pulsestudio-logo.png"
+              alt=""
+              width={32}
+              height={32}
+              priority
+              className="h-8 w-8 rounded-lg object-contain"
+            />
+            {!sidebarCollapsed && (
+              <span className="truncate text-sm font-semibold tracking-tight text-[#E8F0F3]">
+                PulseStudio
+              </span>
+            )}
+          </button>
+        </SidebarNavTooltip>
         <button
           type="button"
           onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
@@ -188,19 +216,21 @@ export default function WorkspaceShell({
 
       {onNewConversation && (
         <div className="border-b border-[#223039]/60 p-3">
-          <button
-            type="button"
-            onClick={onNewConversation}
-            className={`flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${
-              activeModule === "chat"
-                ? "bg-[#E85D5D] text-[#080D10] hover:bg-[#F16B75]"
-                : "border border-[#223039] bg-[#141F25] text-[#E8F0F3] hover:border-[#E85D5D]/40 hover:bg-[#19262D]"
-            }`}
-            title="Iniciar nueva conversación con IA"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            {!sidebarCollapsed && <span>Nueva conversación</span>}
-          </button>
+          <SidebarNavTooltip label="Nueva conversación">
+            <button
+              type="button"
+              onClick={onNewConversation}
+              className={`flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                activeModule === "chat"
+                  ? "bg-[#E85D5D] text-[#080D10] hover:bg-[#F16B75]"
+                  : "border border-[#223039] bg-[#141F25] text-[#E8F0F3] hover:border-[#E85D5D]/40 hover:bg-[#19262D]"
+              }`}
+              aria-label={sidebarCollapsed ? "Nueva conversación" : undefined}
+            >
+              <Sparkles className="h-3.5 w-3.5 shrink-0" />
+              {!sidebarCollapsed && <span>Nueva conversación</span>}
+            </button>
+          </SidebarNavTooltip>
         </div>
       )}
 
@@ -228,26 +258,29 @@ export default function WorkspaceShell({
       </nav>
 
       <div className="border-t border-[#223039] bg-[#080D10]/40 p-3">
-        <button
-          type="button"
-          onClick={() => selectModule("configuracion")}
-          className="flex w-full items-center gap-2.5 rounded-lg p-1.5 text-left transition hover:bg-[#141F25]"
-          title="Configuración del perfil"
-        >
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#223039] bg-[#141F25] text-xs font-bold text-[#E85D5D]">
-            OS
-          </span>
-          {!sidebarCollapsed && (
-            <span className="min-w-0">
-              <span className="block truncate text-xs font-semibold text-[#E8F0F3]">
-                Odabel
-              </span>
-              <span className="flex items-center gap-1 font-mono text-[10px] text-[#E85D5D]">
-                <span aria-hidden="true">●</span> Local listo
-              </span>
+        <SidebarNavTooltip label="Configuración del perfil (Odabel)">
+          <button
+            type="button"
+            onClick={() => selectModule("configuracion")}
+            className="flex w-full items-center justify-center gap-2.5 rounded-lg p-1.5 text-left transition hover:bg-[#141F25]"
+            aria-label={sidebarCollapsed ? "Configuración del perfil (Odabel)" : undefined}
+            title={!sidebarCollapsed ? "Configuración del perfil" : undefined}
+          >
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#223039] bg-[#141F25] text-xs font-bold text-[#E85D5D]">
+              OS
             </span>
-          )}
-        </button>
+            {!sidebarCollapsed && (
+              <span className="min-w-0">
+                <span className="block truncate text-xs font-semibold text-[#E8F0F3]">
+                  Odabel
+                </span>
+                <span className="flex items-center gap-1 font-mono text-[10px] text-[#E85D5D]">
+                  <span aria-hidden="true">●</span> Local listo
+                </span>
+              </span>
+            )}
+          </button>
+        </SidebarNavTooltip>
       </div>
     </>
   );
@@ -273,15 +306,9 @@ export default function WorkspaceShell({
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div className="flex min-w-0 items-center gap-1.5 truncate font-mono text-xs text-[#758792]">
-              <button
-                type="button"
-                className="hidden shrink-0 hover:text-[#E8F0F3] sm:inline"
-                onClick={() => selectModule("dashboard")}
-              >
-                Espacio de trabajo
-              </button>
-              <ChevronRight className="hidden h-3 w-3 shrink-0 sm:block" />
+            <div className="flex min-w-0 items-center gap-1.5 truncate text-xs text-[#758792]">
+              <span className="hidden shrink-0 font-mono sm:inline">PulseStudio</span>
+              <ChevronRight className="hidden h-3 w-3 shrink-0 sm:block" aria-hidden />
               <span className="truncate font-semibold text-[#E8F0F3]">
                 {workspaceModules[activeModule].title}
               </span>
@@ -338,19 +365,16 @@ export default function WorkspaceShell({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => selectModule("ide")}
-              className={`hidden items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition sm:flex ${
-                activeModule === "ide"
-                  ? "border-[#E85D5D] bg-[#E85D5D] text-[#080D10]"
-                  : "border-[#223039] bg-[#141F25] text-[#E8F0F3] hover:bg-[#19262D]"
-              }`}
-            >
-              <Code2 className="h-3.5 w-3.5" />
-              <span>Abrir IDE</span>
-            </button>
             {headerActions}
+            <Link
+              href="/devdocs"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-[#223039] text-[#A6B5BE] transition hover:bg-[#141F25] hover:text-[#E8F0F3]"
+              aria-label="Abrir DevDocs"
+              title="Documentación de PulseStudio"
+            >
+              <BookOpen className="h-4 w-4" />
+            </Link>
+            <ThemeToggleButton />
           </div>
         </header>
         <main className="flex min-h-[calc(100vh-3.5rem)] min-w-0 flex-1 flex-col">

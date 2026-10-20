@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, FileCode2, FolderTree, LoaderCircle, Play, RefreshCw, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/lib/api-fetch";
 
 type RunnerJob = "lint" | "build" | "playwright" | "typecheck" | "prisma";
 
@@ -51,7 +52,7 @@ export default function WorkspaceIDE() {
     setLoadingFiles(true);
     setError(null);
     try {
-      const response = await fetch("/api/workspace", { cache: "no-store" });
+      const response = await apiFetch("/api/workspace", { cache: "no-store" });
       const data: unknown = await response.json();
       if (!response.ok || !isWorkspaceFileList(data)) {
         throw new Error(getErrorMessage(data, "No se pudo cargar el explorador del workspace."));
@@ -87,7 +88,7 @@ export default function WorkspaceIDE() {
     setLoadingFile(true);
     setError(null);
     try {
-      const response = await fetch(`/api/workspace?path=${encodeURIComponent(filePath)}`, { cache: "no-store" });
+      const response = await apiFetch(`/api/workspace?path=${encodeURIComponent(filePath)}`, { cache: "no-store" });
       const data: unknown = await response.json();
       if (requestId !== fileRequestRef.current) return;
       if (!response.ok || !isWorkspaceFile(data)) {
@@ -110,7 +111,7 @@ export default function WorkspaceIDE() {
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch("/api/workspace", {
+      const response = await apiFetch("/api/workspace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: selectedPath, content }),
@@ -135,15 +136,35 @@ export default function WorkspaceIDE() {
     setRunning(true);
     setError(null);
     setResult(null);
+    const testPath = job === "playwright" && selectedPath && /\.(spec|test)\.[cm]?[jt]sx?$/.test(selectedPath)
+      ? selectedPath
+      : undefined;
+    if (!window.confirm(`Revisa y aprueba esta ejecución:\n\nTrabajo: ${job}\nWorkspace: ${workspace}${testPath ? `\nTest: ${testPath}` : ""}`)) {
+      setRunning(false);
+      return;
+    }
     try {
-      const response = await fetch("/api/runner", {
+      const approvalResponse = await apiFetch("/api/runner", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action: "authorize",
           job,
-          ...(job === "playwright" && selectedPath && /\.(spec|test)\.[cm]?[jt]sx?$/.test(selectedPath)
-            ? { testPath: selectedPath }
-            : {}),
+          ...(testPath ? { testPath } : {}),
+        }),
+      });
+      const approvalBody: unknown = await approvalResponse.json();
+      if (!approvalResponse.ok || !isRecord(approvalBody) || typeof approvalBody.approvalId !== "string") {
+        throw new Error(getErrorMessage(approvalBody, "No se pudo registrar la aprobación."));
+      }
+      const response = await apiFetch("/api/runner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "execute",
+          job,
+          approvalId: approvalBody.approvalId,
+          ...(testPath ? { testPath } : {}),
         }),
       });
       const data: unknown = await response.json();

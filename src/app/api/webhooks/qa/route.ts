@@ -1,14 +1,8 @@
-import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import { adminApiAuthorizationError } from "@/lib/local-api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function authorized(request: Request) {
-  const expected = process.env.PULSE_ADMIN_TOKEN;
-  const received = request.headers.get("x-pulse-admin-token");
-  return Boolean(expected && received && expected.length === received.length && timingSafeEqual(Buffer.from(expected), Buffer.from(received)));
-}
 
 const VALID_STORY_PROVIDERS = ["n8n", "jira", "azure", "github"];
 
@@ -35,9 +29,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  if (!authorized(request)) {
-    return NextResponse.json({ error: "Token administrativo inválido." }, { status: 401 });
-  }
+  const authorizationError = adminApiAuthorizationError(request);
+  if (authorizationError) return authorizationError;
   try {
     const body = await request.json().catch(() => null);
     if (!body || !validateStoryPayload(body)) {
@@ -52,8 +45,8 @@ export async function POST(request: Request) {
       storyId,
       message: "Historia de usuario recibida y validada correctamente.",
     });
-  } catch (error) {
-    console.error("webhook qa error:", error);
+  } catch {
+    console.error("webhook qa processing failed");
     return NextResponse.json({ error: "Error interno al procesar la historia." }, { status: 500 });
   }
 }

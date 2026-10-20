@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/lib/api-fetch";
 
 type TransportKind = "stdio" | "sse";
 type ServerStatus = "unknown" | "connected" | "disconnected" | "testing";
@@ -82,7 +83,7 @@ export default function MCPManagerView({ onUseToolResult }: { onUseToolResult: (
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/mcp", { cache: "no-store" });
+      const response = await apiFetch("/api/mcp", { cache: "no-store" });
       const body: unknown = await response.json();
       if (!response.ok || !isRecord(body) || !Array.isArray(body.servers)) {
         throw new Error(getErrorMessage(body, "No se pudieron cargar los servidores MCP."));
@@ -129,7 +130,7 @@ export default function MCPManagerView({ onUseToolResult }: { onUseToolResult: (
     setError(null);
     setStatusByServer((current) => ({ ...current, [targetId]: "testing" }));
     try {
-      const response = await fetch("/api/mcp", {
+      const response = await apiFetch("/api/mcp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(serverId
@@ -158,7 +159,7 @@ export default function MCPManagerView({ onUseToolResult }: { onUseToolResult: (
     setBusy("save");
     setError(null);
     try {
-      const response = await fetch("/api/mcp", {
+      const response = await apiFetch("/api/mcp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "save", server: toServerPayload(form) }),
@@ -185,7 +186,7 @@ export default function MCPManagerView({ onUseToolResult }: { onUseToolResult: (
     setBusy(`delete:${server.id}`);
     setError(null);
     try {
-      const response = await fetch("/api/mcp", {
+      const response = await apiFetch("/api/mcp", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ serverId: server.id }),
@@ -222,7 +223,21 @@ export default function MCPManagerView({ onUseToolResult }: { onUseToolResult: (
     setError(null);
     setOutput(null);
     try {
-      const response = await fetch("/api/mcp", {
+      const approvalResponse = await apiFetch("/api/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "authorize",
+          serverId: server.id,
+          toolName: tool.name,
+          arguments: args,
+        }),
+      });
+      const approvalBody: unknown = await approvalResponse.json();
+      if (!approvalResponse.ok || !isRecord(approvalBody) || typeof approvalBody.approvalId !== "string") {
+        throw new Error(getErrorMessage(approvalBody, "No se pudo registrar la aprobación MCP."));
+      }
+      const response = await apiFetch("/api/mcp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -230,7 +245,7 @@ export default function MCPManagerView({ onUseToolResult }: { onUseToolResult: (
           serverId: server.id,
           toolName: tool.name,
           arguments: args,
-          approved: true,
+          approvalId: approvalBody.approvalId,
         }),
       });
       const body: unknown = await response.json();

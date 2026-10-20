@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
+import { apiFetch } from "@/lib/api-fetch";
 import {
   Eye,
   EyeOff,
@@ -60,18 +61,13 @@ export function EnvironmentVariablesPanel() {
 
   const { toast } = useToast();
 
-  useEffect(() => {
-    const savedToken = localStorage.getItem("pulse_admin_token") || "";
-    if (savedToken) setAdminToken(savedToken);
-  }, []);
-
   const fetchVariables = useCallback(async () => {
     setLoading(true);
     try {
       const headers: Record<string, string> = {};
       if (adminToken) headers["x-pulse-admin-token"] = adminToken;
 
-      const res = await fetch("/api/env", { headers });
+      const res = await apiFetch("/api/env", { headers });
       if (res.status === 401) {
         setShowTokenInput(true);
         toast({
@@ -105,11 +101,10 @@ export function EnvironmentVariablesPanel() {
   }, [fetchVariables]);
 
   const saveToken = () => {
-    localStorage.setItem("pulse_admin_token", adminToken);
     setShowTokenInput(false);
     toast({
-      title: "Token guardado",
-      description: "Token administrativo actualizado localmente.",
+      title: "Autorización temporal",
+      description: "El token administrativo se conservará sólo en memoria mientras esta vista permanezca abierta.",
     });
     fetchVariables();
   };
@@ -128,7 +123,7 @@ export function EnvironmentVariablesPanel() {
       const headers: Record<string, string> = {};
       if (adminToken) headers["x-pulse-admin-token"] = adminToken;
 
-      const res = await fetch(`/api/env?reveal=${encodeURIComponent(item.id)}`, { headers });
+      const res = await apiFetch(`/api/env?reveal=${encodeURIComponent(item.id)}`, { headers });
       if (!res.ok) {
         throw new Error("No se pudo revelar la variable.");
       }
@@ -172,7 +167,7 @@ export function EnvironmentVariablesPanel() {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (adminToken) headers["x-pulse-admin-token"] = adminToken;
 
-      const res = await fetch("/api/env", {
+      const res = await apiFetch("/api/env", {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -216,7 +211,7 @@ export function EnvironmentVariablesPanel() {
       const headers: Record<string, string> = {};
       if (adminToken) headers["x-pulse-admin-token"] = adminToken;
 
-      const res = await fetch(`/api/env?id=${encodeURIComponent(id)}`, {
+      const res = await apiFetch(`/api/env?id=${encodeURIComponent(id)}`, {
         method: "DELETE",
         headers,
       });
@@ -251,7 +246,7 @@ export function EnvironmentVariablesPanel() {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (adminToken) headers["x-pulse-admin-token"] = adminToken;
 
-      const res = await fetch("/api/env", {
+      const res = await apiFetch("/api/env", {
         method: "POST",
         headers,
         body: JSON.stringify({

@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
 
   almLoadConnections: () => ipcRenderer.invoke("alm:load-connections"),
+  almListActionConnections: () => ipcRenderer.invoke("alm:list-action-connections"),
   almTestConnection: (input) => ipcRenderer.invoke("alm:test-connection", input),
   almSaveConnection: (input) => ipcRenderer.invoke("alm:save-connection", input),
   almDeleteConnection: (id) => ipcRenderer.invoke("alm:delete-connection", id),

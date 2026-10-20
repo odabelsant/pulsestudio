@@ -1,8 +1,10 @@
+import type { ActionAlmConnectionsResult } from "./action-context";
+
 export interface ElectronAPI {
   isElectron: boolean;
   platform: string;
-  almGetProfiles?: () => Promise<unknown>;
   almLoadConnections: () => Promise<AlmLoadResult>;
+  almListActionConnections: () => Promise<ActionAlmConnectionsResult>;
   almTestConnection: (input: AlmConnectionInput) => Promise<AlmTestResult>;
   almSaveConnection: (input: AlmConnectionInput) => Promise<AlmSaveResult>;
   almDeleteConnection: (id: string) => Promise<AlmDeleteResult>;
@@ -20,7 +22,7 @@ export interface ElectronAPI {
   onTerminalExit: (callback: (data: { exitCode: number; signal?: number }) => void) => () => void;
 }
 
-export type AlmPlatform = "azure-devops" | "jira";
+export type AlmPlatform = "azure-devops" | "jira" | "trello";
 
 export interface AlmConnectionInput {
   id?: string;
